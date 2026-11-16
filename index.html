@@ -294,6 +294,7 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
       <li>Зараховано повідомлення з ознаками влучання (влучання, вибух, уламки, пошкодження, постраждалі). Повідомлення лише про рух цілей і тривоги відкинуто.</li>
       <li>Одне місто за одну добу — одна подія, навіть якщо про неї писали кілька каналів. Тому кілька влучань за одну ніч рахуються як одна подія.</li>
       <li>Обмеження: якщо ОВА вказує лише район чи громаду без назви міста, такий випадок не потрапляє в рейтинг. Масштаб удару метрика не враховує.</li>
+      <li>Контури областей: amCharts geodata; підкладки карти: Esri, OpenTopoMap.</li>
     </ul>
   </section>
 </div>
@@ -380,6 +381,20 @@ const GEO = null;
 
   if (C.some(c => c.border)) document.getElementById('bnote').textContent = ' * — міста ближче до фронту.';
 
+  // ---------- КОНТУРИ ОБЛАСТЕЙ: вбудовані скриптом або з сервера amCharts
+  let _geoP = null;
+  function getGeo() {
+    if (_geoP) return _geoP;
+    if (typeof GEO !== 'undefined' && Array.isArray(GEO) && GEO.length) return (_geoP = Promise.resolve(GEO));
+    _geoP = fetch('https://cdn.amcharts.com/lib/5/geodata/json/ukraineLow.json').then(r => r.json()).then(g => {
+      const out = [];
+      (g.features || []).forEach(f => { const gm = f.geometry || {}; const parts = gm.type === 'Polygon' ? [gm.coordinates] : (gm.coordinates || []);
+        parts.forEach(pl => { if (pl && pl[0] && pl[0].length > 3) out.push(pl[0].filter((_, i) => i % 2 === 0 || i === pl[0].length - 1)); }); });
+      return out.length ? out : null;
+    }).catch(() => null);
+    return _geoP;
+  }
+
   // ---------- ФОН ШАПКИ: нічна карта, міста світяться за кількістю подій
   (function heroBg() {
     const cv = document.getElementById('heroBg'); if (!cv || MODE === 'print') return;
@@ -409,6 +424,12 @@ const GEO = null;
       let sx = (x1 - x0) / (40.3 - 22), sy = (y1 - y0) / (52.5 - 44.3);
       if (narrow) { sx = sy = Math.min((x1 - x0) / ((40.3 - 22) * K), sy); sx *= K; }
       const X = lo => x0 + (lo - 22) * sx, Y = la => y0 + (52.5 - la) * sy;
+      if (POLYS) {   // контури областей: м'яка заливка й тонкі межі
+        g.beginPath();
+        POLYS.forEach(r => r.forEach(([lo, la], i) => i ? g.lineTo(X(lo), Y(la)) : g.moveTo(X(lo), Y(la))));
+        g.fillStyle = 'rgba(110,130,160,0.07)'; g.fill('evenodd');
+        g.strokeStyle = 'rgba(150,172,205,0.30)'; g.lineWidth = 1; g.lineJoin = 'round'; g.stroke();
+      }
       g.strokeStyle = 'rgba(120,140,165,0.07)'; g.lineWidth = 1;
       for (let lo = 22; lo <= 40; lo += 2) { g.beginPath(); g.moveTo(X(lo), 0); g.lineTo(X(lo), H); g.stroke(); }
       for (let la = 45; la <= 52; la += 1) { g.beginPath(); g.moveTo(0, Y(la)); g.lineTo(W, Y(la)); g.stroke(); }
@@ -434,7 +455,8 @@ const GEO = null;
         g.fillStyle = sh; g.fillRect(0, 0, W * 0.55, H);
       }
     }
-    draw(); let t; addEventListener('resize', () => { clearTimeout(t); t = setTimeout(draw, 150); });
+    let POLYS = null; draw(); getGeo().then(p => { if (p) { POLYS = p; draw(); } });
+    let t; addEventListener('resize', () => { clearTimeout(t); t = setTimeout(draw, 150); });
   })();
 
   // ---------- BAR CHART (horizontal ranking)
@@ -613,21 +635,12 @@ const GEO = null;
       const t = el('text', { x: tx, y: ty, 'text-anchor': anchor, 'font-size': 13.5, fill: css('--text-primary'), 'paint-order': 'stroke', stroke: css('--surface-1'), 'stroke-width': 3, 'stroke-linejoin': 'round', 'pointer-events': 'none' }, gL);
       t.textContent = label;
     });
-    // контури областей (завантажуються з CDN; якщо не вдалося — карта без контурів)
-    const drawGeo = geo => {
-      const path = coords => coords.map(ring => ring.map(([lon, lat], i) => `${i ? 'L' : 'M'}${X(lon).toFixed(1)},${Y(lat).toFixed(1)}`).join('') + 'Z').join('');
-      (geo.features || []).forEach(f => {
-        const gm = f.geometry; if (!gm) return;
-        const d = gm.type === 'Polygon' ? path(gm.coordinates) : gm.type === 'MultiPolygon' ? gm.coordinates.map(path).join('') : '';
-        if (d) el('path', { d, fill: css('--surface-2'), stroke: css('--border'), 'stroke-width': 1, 'stroke-linejoin': 'round' }, gGeo);
-      });
-    };
-    if (typeof GEO !== 'undefined' && GEO && GEO.features) { drawGeo(GEO); return; }
-    import('https://cdn.jsdelivr.net/npm/@amcharts/amcharts4-geodata@4.1.28/ukraineLow.js')
-      .then(m => drawGeo(m.default || m))
-      .catch(() => {
-        import('https://cdn.jsdelivr.net/npm/@amcharts/amcharts4-geodata/ukraineLow.js').then(m => drawGeo(m.default || m)).catch(() => {});
-      });
+    // контури областей
+    getGeo().then(polys => {
+      if (!polys) return;
+      const d = polys.map(r => r.map(([lon, lat], i) => `${i ? 'L' : 'M'}${X(lon).toFixed(1)},${Y(lat).toFixed(1)}`).join('') + 'Z').join('');
+      el('path', { d, fill: css('--surface-2'), stroke: css('--border'), 'stroke-width': 1, 'stroke-linejoin': 'round' }, gGeo);
+    });
   }
 
   // ---------- WEEKLY LINES
