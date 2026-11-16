@@ -1,0 +1,50 @@
+# Канали для хмарного збирача — по одному в рядку (можна @назва або https://t.me/назва).
+# Рядки з # — коментарі.
+
+kpszsu
+
+# --- ОВА тилових областей ---
+vinnytskaODA
+volynskaODA
+zhytomyrskaODA
+zakarpatskaODA
+onyshchuksvitlana
+kyivoda
+VA_Kyiv
+kirovohradskaODA
+kozytskyy_maksym_official
+poltavskaOVA
+oleksandrkoval_rv
+ternopilskaODA
+khmelnytskaODA
+cherkaskaODA
+chernivetskaODA
+
+# --- Міські голови / міськради тилових міст ---
+vitaliy_klitschko
+andriysadovyi
+s_morgunov
+martsinkiv
+Nadal_Sergii
+symchyshyn_oleksandr
+klichuk_roman
+bondarenko_mayor
+igopolishchuk
+shakyrzian_viktor
+kr_rada
+kateryna_yamshchykova
+vitalii_maletskyi
+
+# --- Міста ближче до фронту (рахуються, якщо в батнику відповісти "т") ---
+# Дніпро, Одеса, Миколаїв, Харків, Запоріжжя, Кривий Ріг
+dnipropetrovskaODA
+borys_filatovv
+odeskaODA
+mykolaivskaODA
+senkevichonline
+synegubov
+ihor_terekhov
+ivan_fedorov_zp
+vilkul
+
+# Не включено: Донецька, Луганська, Сумська, Херсонська, Чернігівська ОВА; Чернігів.
