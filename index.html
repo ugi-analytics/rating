@@ -808,7 +808,8 @@ renderReport(DATA);
 <script>
 // ===== ЖИВИЙ РЕЖИМ: дані з хмарного збирача (гілка data), перерахунок у браузері =====
 (function () {
-  const SRC = 'https://raw.githubusercontent.com/ugi-analytics/rating/data/events.json';
+  const SRCS = ['https://108-61-210-111.sslip.io/events.json',                       // цілодобовий сервер (секунди)
+                'https://raw.githubusercontent.com/ugi-analytics/rating/data/events.json']; // запасний: GitHub (5–20 хв)
   if (DATA && DATA.meta && DATA.meta.mode && DATA.meta.mode !== 'full') return;   // PDF/PNG — без живого режиму
   const $ = id => document.getElementById(id);
   const ls = { get: (k, d) => { try { const v = localStorage.getItem(k); return v === null ? d : v; } catch (e) { return d; } },
@@ -957,11 +958,26 @@ renderReport(DATA);
 
   async function load(first) {
     try {
-      const r = await fetch(SRC + '?t=' + Math.floor(Date.now() / 60000), { cache: 'no-store' });
-      if (!r.ok) throw new Error(r.status);
-      const nj = await r.json();
-      if (!nj || !Array.isArray(nj.events) || !nj.events.length) return;
+      let nj = null;
+      for (const src of SRCS) {
+        try {
+          const r = await fetch(src + '?t=' + Math.floor(Date.now() / 15000), { cache: 'no-store' });
+          if (!r.ok) continue;
+          const j = await r.json();
+          if (!j || !Array.isArray(j.events) || !j.events.length) continue;
+          const age = Date.now() - Date.parse(j.updated);
+          if (!nj || (age < 10 * 60000) || Date.parse(j.updated) > Date.parse(nj.updated)) nj = j;
+          if (age < 10 * 60000) break;            // свіже джерело знайдено
+        } catch (e) { /* пробуємо наступне */ }
+      }
+      if (!nj) return;
       if (J && nj.updated === J.updated) return;
+      if (J && nj.rev && nj.rev === J.rev) {     // подій не додалось — лише «пульс»: оновлюємо час у статусі
+        J.updated = nj.updated;
+        const st = $('status'), u = kyiv(new Date(J.updated));
+        if (st) { st.querySelector('span').innerHTML = `оновлено 0 хв тому<span class="st-date"> · ${u.slice(8, 10)}.${u.slice(5, 7)} ${u.slice(11, 16)}</span>`; st.className = 'status'; }
+        return;
+      }
       const prev = J; J = nj;
       if (first) controls();
       render();
@@ -969,7 +985,7 @@ renderReport(DATA);
     } catch (e) { /* немає мережі або даних — лишається вбудований звіт */ }
   }
   load(true);
-  setInterval(() => { if (!document.hidden) load(false); }, 60000);
+  setInterval(() => { if (!document.hidden) load(false); }, 20000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) load(false); });
 })();
 </script>
