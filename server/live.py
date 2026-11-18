@@ -13,12 +13,14 @@
 """
 import asyncio
 import hashlib
+import html
 import json
 import os
 import random
 import sys
 import time
 from datetime import datetime, timedelta
+from urllib.parse import parse_qs, urlparse
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -46,6 +48,11 @@ dirty = True
 failed = set()
 peer2ch = {}                   # peer_id -> ім'я каналу
 channels = []
+ENV = {}
+bot = None                     # клієнт Telegram-бота сповіщень
+notify_q = None              # черга нових подій для бота
+subs = {}                      # chat_id -> {"cities": [...], "all": bool}
+NOTIFY_MAX_AGE = 90 * 60       # не сповіщати про дописи, старші за 90 хв (наприклад, під час дочитування)
 
 
 def log(*a):
@@ -71,6 +78,11 @@ def upsert(m, ch):
             if new:
                 log(f"+ {ch}/{m.id}: {', '.join(e['c'] for e in new)}")
         by_msg[(ch, m.id)] = new
+        added = {e["c"] for e in new} - {e["c"] for e in (old or [])}
+        if added and notify_q is not None and notify_q.qsize() < 500 and (time.time() - m.date.timestamp()) < NOTIFY_MAX_AGE:
+            for e in new:
+                if e["c"] in added:
+                    notify_q.put_nowait(e)
     if m.id > state["last_id"].get(ch, 0):
         state["last_id"][ch] = m.id
 
@@ -194,6 +206,19 @@ async def main():
         ch = peer2ch.get(ev.chat_id)
         if ch:
             upsert(ev.message, ch)
+
+    global notify_q
+    from bot import Notifier
+    notifier = Notifier(DATA, int(env["TG_API_ID"]), env["TG_API_HASH"], log)
+    notify_q = notifier.q
+    try:
+        await notifier.start()
+    except Exception as e:
+        log(f"! Бот не запустився: {type(e).__name__}: {e}")
+    try:
+        await asyncio.start_server(notifier.handle_http, "127.0.0.1", 8099)
+    except OSError as e:
+        log(f"! Сторінка налаштування бота недоступна: {e}")
 
     log(f"Старт. Каналів у списку: {len(channels)}")
     await client.catch_up()
