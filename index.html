@@ -259,6 +259,16 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
 .th-list a { color: var(--accent); text-decoration: none; white-space: nowrap; }
 .th-quiet { color: var(--text-muted); font-size: 13px; margin: 6px 0 0; }
 @media (max-width: 700px) { .th-list li { grid-template-columns: 42px 1fr; } .th-list li > span:last-child { grid-column: 1 / -1; } }
+.permhelp { position: fixed; inset: 0; z-index: 9000; background: rgba(5,8,12,.72); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.permhelp[hidden] { display: none; }
+.ph-box { max-width: 420px; width: 100%; background: var(--surface-1); border: 1px solid var(--border); border-radius: 16px; padding: 20px 22px; box-shadow: 0 20px 60px rgba(0,0,0,.5); }
+.ph-box h3 { margin: 0 0 6px; font: 700 18px var(--f-display); }
+.ph-box p { margin: 0 0 10px; color: var(--text-secondary); font-size: 14px; line-height: 1.5; }
+.ph-box ol { margin: 0 0 14px; padding-left: 20px; font-size: 14px; line-height: 1.6; }
+.ph-box b { color: var(--text-primary); }
+.ph-box .ph-btns { display: flex; gap: 8px; }
+.ph-box button { flex: 1; font: 600 14px var(--f-body); border-radius: 10px; padding: 10px; cursor: pointer; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-primary); }
+.ph-box button.pri { background: var(--accent); border-color: var(--accent); color: #1a1109; }
 .mycard { margin: 14px 0 0; background: rgba(22,27,34,.7); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
   border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 14px; padding: 14px 18px; }
 .mc-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -302,6 +312,7 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
     <label class="mycity">Моє місто <select id="lvCity"><option value="">— вибрати —</option></select></label>
   </div>
   <section class="mycard" id="myCard" hidden></section>
+  <div class="permhelp" id="permHelp" hidden role="dialog" aria-modal="true" aria-labelledby="phTitle"><div class="ph-box" id="phBox"></div></div>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
   <div id="static"><div class='note'>Це спрощений вигляд. Щоб побачити карту й графіки, відкрийте файл у браузері (Chrome, Safari, Edge), а не у вбудованому переглядачі месенджера.</div><p><b>Період:</b> 01.10.2026 – 16.11.2026 · <b>подій:</b> 317 · <b>міст:</b> 28 · <b>загиблі (≈):</b> 123 · <b>поранені (≈):</b> 991</p><div style='overflow-x:auto'><table><thead><tr><th>№</th><th>Місто</th><th class='num'>Подій</th><th class='num'>Частка</th><th class='num'>Заг.*</th><th class='num'>Пор.*</th></tr></thead><tbody><tr><td class='num' style='text-align:left'>1</td><td>Запоріжжя</td><td class='num'>47</td><td class='num'>14.8%</td><td class='num'>53</td><td class='num'>270</td></tr><tr><td class='num' style='text-align:left'>2</td><td>Харків</td><td class='num'>45</td><td class='num'>14.2%</td><td class='num'>23</td><td class='num'>373</td></tr><tr><td class='num' style='text-align:left'>3</td><td>Кривий Ріг</td><td class='num'>45</td><td class='num'>14.2%</td><td class='num'>2</td><td class='num'>21</td></tr><tr><td class='num' style='text-align:left'>4</td><td>Дніпро</td><td class='num'>40</td><td class='num'>12.6%</td><td class='num'>22</td><td class='num'>110</td></tr><tr><td class='num' style='text-align:left'>5</td><td>Київ</td><td class='num'>28</td><td class='num'>8.8%</td><td class='num'>8</td><td class='num'>75</td></tr><tr><td class='num' style='text-align:left'>6</td><td>Миколаїв</td><td class='num'>16</td><td class='num'>5.0%</td><td class='num'>0</td><td class='num'>4</td></tr><tr><td class='num' style='text-align:left'>7</td><td>Одеса</td><td class='num'>14</td><td class='num'>4.4%</td><td class='num'>3</td><td class='num'>9</td></tr><tr><td class='num' style='text-align:left'>8</td><td>Кременчук</td><td class='num'>13</td><td class='num'>4.1%</td><td class='num'>6</td><td class='num'>84</td></tr><tr><td class='num' style='text-align:left'>9</td><td>Полтава</td><td class='num'>10</td><td class='num'>3.2%</td><td class='num'>0</td><td class='num'>3</td></tr><tr><td class='num' style='text-align:left'>10</td><td>Умань</td><td class='num'>8</td><td class='num'>2.5%</td><td class='num'>0</td><td class='num'>1</td></tr><tr><td class='num' style='text-align:left'>11</td><td>Рівне</td><td class='num'>8</td><td class='num'>2.5%</td><td class='num'>1</td><td class='num'>22</td></tr><tr><td class='num' style='text-align:left'>12</td><td>Кропивницький</td><td class='num'>6</td><td class='num'>1.9%</td><td class='num'>0</td><td class='num'>5</td></tr><tr><td class='num' style='text-align:left'>13</td><td>Луцьк</td><td class='num'>5</td><td class='num'>1.6%</td><td class='num'>3</td><td class='num'>10</td></tr><tr><td class='num' style='text-align:left'>14</td><td>Львів</td><td class='num'>4</td><td class='num'>1.3%</td><td class='num'>0</td><td class='num'>0</td></tr><tr><td class='num' style='text-align:left'>15</td><td>Ковель</td><td class='num'>4</td><td class='num'>1.3%</td><td class='num'>0</td><td class='num'>0</td></tr><tr><td class='num' style='text-align:left'>16</td><td>Івано-Франківськ</td><td class='num'>4</td><td class='num'>1.3%</td><td class='num'>0</td><td class='num'>0</td></tr><tr><td class='num' style='text-align:left'>17</td><td>Черкаси</td><td class='num'>3</td><td class='num'>0.9%</td><td class='num'>0</td><td class='num'>0</td></tr><tr><td class='num' style='text-align:left'>18</td><td>Тернопіль</td><td class='num'>3</td><td class='num'>0.9%</td><td class='num'>0</td><td class='num'>0</td></tr><tr><td class='num' style='text-align:left'>19</td><td>Хмельницький</td><td class='num'>3</td><td class='num'>0.9%</td><td class='num'>0</td><td class='num'>1</td></tr><tr><td class='num' style='text-align:left'>20</td><td>Олександрія</td><td class='num'>2</td><td class='num'>0.6%</td><td class='num'>2</td><td class='num'>3</td></tr><tr><td class='num' style='text-align:left'>21</td><td>Чернівці</td><td class='num'>2</td><td class='num'>0.6%</td><td class='num'>0</td><td class='num'>0</td></tr><tr><td class='num' style='text-align:left'>22</td><td>Біла Церква</td><td class='num'>1</td><td class='num'>0.3%</td><td class='num'>0</td><td class='num'>0</td></tr><tr><td class='num' style='text-align:left'>23</td><td>Бровари</td><td class='num'>1</td><td class='num'>0.3%</td><td class='num'>0</td><td class='num'>0</td></tr><tr><td class='num' style='text-align:left'>24</td><td>Знам&#x27;янка</td><td class='num'>1</td><td class='num'>0.3%</td><td class='num'>0</td><td class='num'>0</td></tr><tr><td class='num' style='text-align:left'>25</td><td>Житомир</td><td class='num'>1</td><td class='num'>0.3%</td><td class='num'>0</td><td class='num'>0</td></tr><tr><td class='num' style='text-align:left'>26</td><td>Бердичів</td><td class='num'>1</td><td class='num'>0.3%</td><td class='num'>0</td><td class='num'>0</td></tr><tr><td class='num' style='text-align:left'>27</td><td>Фастів</td><td class='num'>1</td><td class='num'>0.3%</td><td class='num'>0</td><td class='num'>0</td></tr><tr><td class='num' style='text-align:left'>28</td><td>Світловодськ</td><td class='num'>1</td><td class='num'>0.3%</td><td class='num'>0</td><td class='num'>0</td></tr></tbody></table></div><p class='muted' style='font-size:12px'>Заг.*, Пор.* — загиблі та поранені, орієнтовна оцінка з текстів повідомлень.</p></div>
@@ -958,6 +969,24 @@ renderReport(DATA);
     pushCity = ''; ls.set('rv_push', '');
   }
 
+  function permHelp(denied) {
+    const ua = navigator.userAgent, ios = isIOS, android = /Android/i.test(ua), app = standalone();
+    const steps = ios ? (app
+        ? ['Відкрийте <b>Параметри</b> iPhone → <b>Сповіщення</b>.', 'Знайдіть у списку <b>«Небо»</b> і ввімкніть <b>«Дозволити сповіщення»</b>.', 'Поверніться сюди й натисніть <b>«Спробувати ще раз»</b>.']
+        : ['На iPhone сповіщення працюють лише у встановленому додатку.', 'Натисніть <b>«Поділитися»</b> (квадрат зі стрілкою) → <b>«На початковий екран»</b>.', 'Відкрийте додаток з іконки й натисніть кнопку сповіщень там.'])
+      : android
+      ? ['Натисніть <b>⋮</b> угорі праворуч (у встановленому додатку — довго натисніть іконку → <b>«Інформація про додаток»</b>).', 'Відкрийте <b>«Налаштування сайту» → «Сповіщення»</b> (або <b>«Сповіщення»</b> додатка).', 'Увімкніть <b>«Дозволити»</b> і поверніться сюди.']
+      : ['Натисніть значок <b>🔕</b> або <b>замочок</b> ліворуч в адресному рядку. У встановленому додатку — <b>⋮</b> угорі → <b>«Інформація про сайт»</b>.', 'Біля <b>«Сповіщення»</b> виберіть <b>«Дозволити»</b>.', 'Натисніть <b>«Спробувати ще раз»</b> нижче.'];
+    $('phBox').innerHTML = `<h3 id="phTitle">${denied ? 'Сповіщення заблоковані' : 'Дозвольте сповіщення'}</h3>
+      <p>${denied ? 'Браузер заблокував сповіщення для цього сайту. Увімкнути їх можна за пів хвилини:' : 'Браузер не показав віконце з дозволом. Зробіть так:'}</p>
+      <ol>${steps.map(x => `<li>${x}</li>`).join('')}</ol>
+      <div class="ph-btns"><button type="button" id="phClose">Пізніше</button><button type="button" class="pri" id="phRetry">Спробувати ще раз</button></div>`;
+    $('permHelp').hidden = false;
+    $('phClose').onclick = () => { $('permHelp').hidden = true; };
+    $('phRetry').onclick = () => { $('permHelp').hidden = true; const b = $('mcNotify'); if (b) { b.disabled = false; b.click(); } };
+    $('phRetry').focus();
+  }
+
   function pushButton(nb) {
     const perm = ('Notification' in window) ? Notification.permission : 'unsupported';
     const can = pushable() && J && J.vapid;
@@ -968,22 +997,25 @@ renderReport(DATA);
     }
     if (!can) {        // запасний варіант: сповіщення лише поки додаток відкритий
       nb.textContent = perm === 'granted' ? 'Сповіщення увімкнено' : perm === 'denied' ? 'Сповіщення заблоковано' : 'Сповіщати про нові події';
-      nb.hidden = perm === 'unsupported'; nb.disabled = perm !== 'default';
-      nb.onclick = async () => { try { await Notification.requestPermission(); } catch (e) {} myCard(); };
+      nb.hidden = perm === 'unsupported'; nb.disabled = perm === 'granted';
+      nb.onclick = async () => { if (Notification.permission === 'denied') { permHelp(true); return; }
+        const h = setTimeout(() => permHelp(false), 4000);
+        try { if (await Notification.requestPermission() === 'denied') permHelp(true); } catch (e) {} finally { clearTimeout(h); } myCard(); };
       return;
     }
     const on = pushCity === my || pushCity === '*';
     nb.hidden = false;
-    nb.disabled = perm === 'denied';
+    nb.disabled = false;
     nb.textContent = perm === 'denied' ? 'Сповіщення заблоковано в браузері' : on ? '🔔 Сповіщення увімкнено' : '🔕 Попереджати про загрози й влучання';
     nb.title = on ? 'Натисніть, щоб вимкнути' : 'Сповіщення прийдуть, навіть коли додаток закритий';
     nb.onclick = async () => {
+      if (Notification.permission === 'denied') { permHelp(true); return; }
       nb.disabled = true;
       try {
         if (on) { await pushOff(); toast('Сповіщення вимкнено.'); }
         else {
           nb.textContent = '⏳ Чекаю дозволу браузера…';
-          const hint = setTimeout(() => toast('<b>Браузер чекає вашого дозволу</b><br>Якщо віконце не з’явилося: натисніть значок 🔔 або замочок ліворуч в адресному рядку (у встановленому додатку — ⋮ → «Інформація про сайт») → «Сповіщення» → «Дозволити», і натисніть кнопку ще раз.'), 5000);
+          const hint = setTimeout(() => permHelp(false), 4000);
           let perm;
           try { perm = await Notification.requestPermission(); } finally { clearTimeout(hint); }
           if (perm !== 'granted') throw new Error('perm');
@@ -991,7 +1023,7 @@ renderReport(DATA);
           await pushSubscribe(my);
           toast(`<b>Сповіщення увімкнено</b><br>Попереджатиму, щойно щось летітиме на ${esc(my)} чи область або з'явиться допис про влучання — навіть коли додаток закритий.`);
         }
-      } catch (e) { toast(e.message === 'perm' ? 'Дозвіл на сповіщення не надано. Увімкніть його: замочок ліворуч в адресному рядку (у додатку — ⋮ → «Інформація про сайт») → «Сповіщення» → «Дозволити».' : 'Не вдалося ввімкнути сповіщення (' + esc(e.message || e) + '). Спробуйте ще раз за хвилину.'); }
+      } catch (e) { if (e.message === 'perm') permHelp(Notification.permission === 'denied'); else toast('Не вдалося ввімкнути сповіщення (' + esc(e.message || e) + '). Спробуйте ще раз за хвилину.'); }
       myCard();
     };
   }
