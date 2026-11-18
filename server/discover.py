@@ -51,6 +51,8 @@ async def run(client, root: Path, data: Path, www: Path, known: set, log):
         os.replace(tmp, sf)
     log(f"Пошук каналів: {len(queries)} запитів, продовжую з {st['qdone']}")
     city_res = rc.compile_cities(True)
+    STATUS.update(state="search", resumed_at=st["qdone"])
+    _write(www, cands, queries, st["qdone"], partial=True)
     for i, q in enumerate(queries):
         if i < st["qdone"]:
             continue
@@ -65,7 +67,10 @@ async def run(client, root: Path, data: Path, www: Path, known: set, log):
                     c["q"].append(q)
         except FloodWaitError as e:
             log(f"! пошук: FloodWait {e.seconds} с")
+            STATUS.update(state="flood", wait=e.seconds, at=datetime.now(timezone.utc).isoformat(timespec="seconds"), q=i)
+            _write(www, cands, queries, i, partial=True)
             await asyncio.sleep(e.seconds + 5)
+            STATUS.update(state="search", wait=0)
         except Exception as e:
             log(f"! пошук «{q}»: {type(e).__name__}: {e}")
         await asyncio.sleep(12)
@@ -74,6 +79,7 @@ async def run(client, root: Path, data: Path, www: Path, known: set, log):
         if i % 10 == 9:
             _write(www, cands, queries, i + 1, partial=True)
     log(f"Знайдено кандидатів: {len(cands)}, перевіряю дописи…")
+    STATUS.update(state="check")
     now = datetime.now(timezone.utc)
     for n, (k, c) in enumerate(list(cands.items())):
         if "n" in c:                         # уже перевірений до перезапуску
@@ -93,7 +99,10 @@ async def run(client, root: Path, data: Path, www: Path, known: set, log):
                     if len(sample) < 3:
                         sample.append(t[:140])
         except FloodWaitError as e:
+            STATUS.update(state="flood-check", wait=e.seconds)
+            _write(www, cands, queries, len(queries), partial=True)
             await asyncio.sleep(min(e.seconds + 5, 600))
+            STATUS.update(state="check", wait=0)
         except Exception as e:
             c["err"] = f"{type(e).__name__}"
         c.update(n=cnt, thr=thr, hit=hit, known=k in known, sample=sample,
@@ -110,10 +119,13 @@ async def run(client, root: Path, data: Path, www: Path, known: set, log):
     log("Пошук каналів завершено")
 
 
+STATUS = {"state": "search"}
+
+
 def _write(www, cands, queries, qdone, partial):
     rows = [{k: v for k, v in c.items() if k not in ("ent", "hash")} for c in cands.values()]
     rows.sort(key=lambda r: (-(r.get("thr") or 0), -(r.get("subs") or 0)))
-    out = {"updated": datetime.now().isoformat(timespec="seconds"), "partial": partial,
+    out = {"updated": datetime.now().isoformat(timespec="seconds"), "partial": partial, "status": STATUS,
            "queries_done": qdone, "queries": len(queries), "channels": rows}
     tmp = www / "discover.json.tmp"
     tmp.write_text(json.dumps(out, ensure_ascii=False), encoding="utf-8")
