@@ -107,10 +107,41 @@ for _r, _rx in RU_REGIONS.items():
     REGION_RES[_r] = re.compile(REGIONS[_r] + "|" + _rx, re.I)
 
 # рядок про вже наслідки (вибух, приліт), а не про рух цілі
-AFTER_RE = re.compile(r"вибух|влучан|приліт|прильот|уламк|пожеж|постражд|загин|поранен|"
+AFTER_RE = re.compile(r"наслідк|\bвпа(?:в|ла|ли)\b|\bупа(?:л|ла|ли)\b|последств|вибух|влучан|приліт|прильот|уламк|пожеж|постражд|загин|поранен|"
                       r"взрыв|прил[её]т|попадан|обломк|пожар|пострадав|погиб|ранен", re.I)
 
 CAPTION_RE = re.compile(r"^\W*(?:фото|відео|фото/відео|джерело|джерела|ілюстрац|скріншот|фото й відео|фото та відео|читайте|деталі|подробиці|фото|видео|источник)\b", re.I)
+
+# «Решетилівська громада», «Кобеляцька міська громада» -> місто
+_HROMADA_RE = re.compile(r"\b([А-ЯІЇЄҐ][а-яіїєґʼ'’-]{2,}?)(?:ськ|цьк|зьк)(?:а|ій|ої|у)\s+(?:(?:міськ|селищн|сільськ|територіальн)\w*\s+)?громад")
+_HSTEMS = None
+
+
+def _hromada(line):
+    global _HSTEMS
+    if _HSTEMS is None:
+        _HSTEMS = {}
+        for c in set(rc.CITY_REGION) | set(rc.CITIES):
+            if " " in c:
+                continue
+            key = re.sub(r"[аиіяоеь]+$", "", c.lower())
+            _HSTEMS.setdefault(key, []).append(c)
+    out = []
+    for m in _HROMADA_RE.finditer(line):
+        st = m.group(1).lower().replace("’", "ʼ").replace("'", "ʼ").rstrip("ь")
+        if len(st) < 3:
+            continue
+        cands = [c for k, cs in _HSTEMS.items() for c in cs
+                 if (k == st or (k.startswith(st) and len(k) - len(st) <= 2) or (st.startswith(k) and len(st) - len(k) <= 2)
+                     or (k[:-1] == st[:-1] and k[-1] == "к" and st[-1] == "ц")) and len(k) >= 4]
+        if len(cands) == 1:
+            out.append(cands[0])
+    return out
+
+
+# підпис каналу внизу допису («🔄 Моніторинг Полтава | Підписатись», «Радар Вінниця | Тривога | Ракети»)
+FOOTER_RE = re.compile(r"підпис|подпис|subscribe|\|.*\||@\w{4,}|^\W*(?:ппо|радар|моніторинг|тривога|повітряна тривога|інформатор)\b.{0,30}$|"
+                       r"(?:радар|моніторинг|monitoring|онлайн|alerts|тривога)\W*$", re.I)
 
 _SPLIT = re.compile(r"\n+|(?<=[.!;])\s+")
 
@@ -119,6 +150,7 @@ def detect(text, ch, city_res, msg_time):
     """Допис -> список загроз [{c, r, k, kn, ic, x}]; порожньо, якщо це не попередження."""
     if not text or len(text) > 3000:
         return []
+    text = re.sub(r"[ʼ’`´]", "'", text)
     if rc.classify(text, city_res):          # це повідомлення про влучання — не попередження
         return []
     ch_reg = rc.CHANNEL_REGION.get(ch.lower())
@@ -129,11 +161,20 @@ def detect(text, ch, city_res, msg_time):
     strict = bool(ch_reg) or "suspilne" in ch.lower() or ch.lower() in STRICT_CHANNELS
     out, seen = [], set()
     kind_ctx = None                          # тип, згаданий у попередньому рядку («Шахеди:\nПолтава\nКременчук»)
+    reg_ctx = None                           # область із рядка-заголовка («Черкащина:»)
     for line in _SPLIT.split(text):
         line = line.strip()
+        if line and FOOTER_RE.search(line) and not re.search(r"курс|напрям|летить|летять|прямує|повз|➡|→", line, re.I):
+            continue
         if not line or CLEAR_RE.search(line) or CAPTION_RE.search(line):
             kind_ctx = None if line else kind_ctx
             continue
+        _h = re.match(r"^\W*([^:\d]{3,25}):?\W*$", line)
+        if _h and not any(rx.search(line) for _k, _n, _ic, rx in KIND_RES):
+            _hr = [r for r, rx in REGION_RES.items() if rx.search(_h.group(1))]
+            if len(_hr) == 1:
+                reg_ctx = _hr[0]
+                continue
         own = next(((k, n, ic) for k, n, ic, rx in KIND_RES if rx.search(line)), None)
         # тип із попереднього короткого рядка-заголовка («Шахеди:») переносимо лише на короткі рядки списку
         kind = own or (kind_ctx if len(line) < 80 else None)
@@ -143,9 +184,16 @@ def detect(text, ch, city_res, msg_time):
             continue
         cities = [c for c, rx in _ci(city_res).items() if rx.search(line)]
         cities += [c for c, rx in RU_CITY_RES.items() if c not in cities and rx.search(line)]
+        cities += [c for c in _hromada(line) if c not in cities]
         # однойменні зі звичайними словами («Щастя», «Долина», «Південне») — лише з каналів своєї області
-        cities = [c for c in cities if c not in rc.AMBIGUOUS or (ch_reg and rc.CITY_REGION.get(c) == ch_reg)]
         regs = [r for r, rx in REGION_RES.items() if rx.search(line)]
+        # «Полтавщина: БпЛА на Семенівку» або заголовок «Черкащина:» над списком — область рядка
+        _pre = re.match(r"^\W*([^:]{3,30}):", line)
+        _pr = [r for r, rx in REGION_RES.items() if rx.search(_pre.group(1))] if _pre else []
+        _pr = _pr or ([reg_ctx] if reg_ctx else [])
+        cities = [c for c in cities if c not in rc.AMBIGUOUS or rc.CITY_REGION.get(c) in ([ch_reg] if ch_reg else []) + _pr]
+        if _pr:
+            cities = [c for c in cities if c in rc.CITIES or rc.CITY_REGION.get(c) in _pr]
         if ch_reg:                           # канал ОВА — лише своя область
             cities = [c for c in cities if rc.CITY_REGION.get(c) == ch_reg]
             regs = [r for r in regs if r == ch_reg]
