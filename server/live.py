@@ -51,6 +51,7 @@ channels = []
 ENV = {}
 bot = None                     # клієнт Telegram-бота сповіщень
 notify_q = None              # черга нових подій для бота
+BOT = {"name": None, "err": None}
 subs = {}                      # chat_id -> {"cities": [...], "all": bool}
 NOTIFY_MAX_AGE = 90 * 60       # не сповіщати про дописи, старші за 90 хв (наприклад, під час дочитування)
 
@@ -100,6 +101,8 @@ def write():
         "updated": now.isoformat(timespec="seconds"),
         "rev": hashlib.md5(body.encode()).hexdigest()[:12],
         "live": True,
+        "bot": BOT["name"],
+        "bot_error": BOT["err"],
         "channels": len(channels),
         "channels_failed": sorted(failed),
         "keep_days": KEEP_DAYS,
@@ -212,9 +215,14 @@ async def main():
     notifier = Notifier(DATA, int(env["TG_API_ID"]), env["TG_API_HASH"], log)
     notify_q = notifier.q
     try:
-        await notifier.start()
+        if not notifier.token_f.exists() and not (DATA / "botfather_tried").exists():
+            (DATA / "botfather_tried").write_text(datetime.now(KYIV).isoformat())
+            await notifier.create_via_botfather(client)
+        if await notifier.start():
+            BOT["name"] = notifier.me.username
     except Exception as e:
-        log(f"! Бот не запустився: {type(e).__name__}: {e}")
+        BOT["err"] = f"{type(e).__name__}: {e}"[:300]
+        log(f"! Бот не запустився: {BOT['err']}")
     try:
         await asyncio.start_server(notifier.handle_http, "127.0.0.1", 8099)
     except OSError as e:

@@ -47,6 +47,47 @@ class Notifier:
     def sub(self, chat):
         return self.subs.setdefault(chat, {"cities": [], "all": False})
 
+    # ---------- автоматичне створення бота через @BotFather (від службового акаунта) ----------
+    async def create_via_botfather(self, user_client):
+        import random
+        import re
+        tok_re = re.compile(r"(\d{6,}:[A-Za-z0-9_-]{30,})")
+        names = ["vluchannia_rating_bot", "rating_vluchan_bot", "tylovi_mista_bot"]
+        names += [f"vluchannia_rating_{random.randint(100, 9999)}_bot" for _ in range(4)]
+        async with user_client.conversation("BotFather", timeout=40) as conv:
+            await conv.send_message("/cancel")
+            await conv.get_response()
+            await conv.send_message("/newbot")
+            r = await conv.get_response()
+            if "name" not in r.raw_text.lower():
+                raise RuntimeError("BotFather: " + r.raw_text[:200])
+            await conv.send_message("Рейтинг влучань")
+            await conv.get_response()
+            for uname in names:
+                await asyncio.sleep(2)
+                await conv.send_message(uname)
+                r = await conv.get_response()
+                m = tok_re.search(r.raw_text)
+                if m:
+                    self.token_f.write_text(m.group(1))
+                    os.chmod(self.token_f, 0o600)
+                    self.log(f"Бота створено через BotFather: @{uname}")
+                    try:   # опис і команди бота
+                        for cmd in (f"/setdescription", f"@{uname}",
+                                    "Сповіщення про влучання й вибухи в тилових містах України з офіційних каналів ОВА та міських голів. Напишіть назву свого міста."):
+                            await asyncio.sleep(1.5)
+                            await conv.send_message(cmd)
+                            await conv.get_response()
+                        for cmd in ("/setcommands", f"@{uname}",
+                                    "all - усі міста\nmy - мої міста\ncities - список міст\nstop - вимкнути сповіщення"):
+                            await asyncio.sleep(1.5)
+                            await conv.send_message(cmd)
+                            await conv.get_response()
+                    except Exception:
+                        pass
+                    return True
+            raise RuntimeError("BotFather не прийняв жодне ім'я: " + r.raw_text[:200])
+
     # ---------- запуск бота ----------
     async def start(self):
         if not self.token_f.exists():
