@@ -143,7 +143,7 @@ class Push:
                 continue
             key = (ep, target)
             last_t, last_k = self.last_thr.get(key, (0, ""))
-            urgent = d["k"] in ("bal", "rkt", "fast") and last_k not in ("bal", "rkt", "fast")
+            urgent = d["k"] in ("bal", "rkt", "fast", "jet") and last_k not in ("bal", "rkt", "fast", "jet")
             if now - last_t < (240 if d["c"] else 600) and not urgent:
                 continue
             self.last_thr[key] = (now, d["k"])
