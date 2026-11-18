@@ -26,6 +26,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 import rating_core as rc                      # noqa: E402
+import threats as TH                          # noqa: E402
 from collector import KYIV, process_message, read_channels, load_json   # noqa: E402
 
 from telethon import TelegramClient, events, utils                     # noqa: E402
@@ -52,6 +53,8 @@ ENV = {}
 bot = None                     # клієнт Telegram-бота сповіщень
 notify_q = None              # черга нових подій для бота
 BOT = {"name": None, "err": None, "vapid": None}
+THREATS = []                 # попередження «що куди летить» за останні 24 год
+THREAT_SEEN = set()          # (канал, id) уже розібраних дописів
 subs = {}                      # chat_id -> {"cities": [...], "all": bool}
 NOTIFY_MAX_AGE = 90 * 60       # не сповіщати про дописи, старші за 90 хв (наприклад, під час дочитування)
 
@@ -66,7 +69,10 @@ def load():
     seed = load_json(DATA / "events.json", None) or load_json(WWW / "events.json", {})
     for e in seed.get("events", []):
         by_msg.setdefault((e["ch"], e["id"]), []).append(e)
-    log(f"Завантажено подій: {sum(len(v) for v in by_msg.values())}")
+    THREATS.extend(seed.get("threats", []))
+    for d in THREATS:
+        THREAT_SEEN.add((d["ch"], d["id"]))
+    log(f"Завантажено подій: {sum(len(v) for v in by_msg.values())}, загроз: {len(THREATS)}")
 
 
 def upsert(m, ch):
@@ -84,6 +90,20 @@ def upsert(m, ch):
             for e in new:
                 if e["c"] in added:
                     notify_q.put_nowait(e)
+    # попередження про загрози — лише для свіжих дописів (до 30 хв), кожен допис один раз
+    age = time.time() - m.date.timestamp()
+    if age < 30 * 60 and (ch, m.id) not in THREAT_SEEN:
+        THREAT_SEEN.add((ch, m.id))
+        found = TH.detect(m.message or "", ch, city_res, m.date)
+        if found:
+            t = m.date.astimezone(KYIV).isoformat(timespec="seconds")
+            for d in found:
+                d.update(t=t, ch=ch, id=m.id, type="threat")
+                THREATS.append(d)
+                if notify_q is not None and notify_q.qsize() < 500:
+                    notify_q.put_nowait(d)
+            dirty = True
+            log(f"⚠ {ch}/{m.id}: " + ", ".join(f"{d['c'] or d['r']} ({d['kn']})" for d in found))
     if m.id > state["last_id"].get(ch, 0):
         state["last_id"][ch] = m.id
 
@@ -96,7 +116,10 @@ def write():
         del by_msg[k]
     ev = [e for lst in by_msg.values() for e in lst]
     ev.sort(key=lambda e: (e["t"], e["ch"], e["id"]), reverse=True)
-    body = json.dumps(ev, ensure_ascii=False, separators=(",", ":"))
+    tcut = (now - timedelta(hours=24)).isoformat(timespec="seconds")
+    THREATS[:] = [d for d in THREATS if d["t"] >= tcut]
+    thr = sorted(({k: v for k, v in d.items() if k != "type"} for d in THREATS), key=lambda d: d["t"], reverse=True)
+    body = json.dumps([ev, thr], ensure_ascii=False, separators=(",", ":"))
     out = {
         "updated": now.isoformat(timespec="seconds"),
         "rev": hashlib.md5(body.encode()).hexdigest()[:12],
@@ -108,8 +131,9 @@ def write():
         "channels": len(channels),
         "channels_failed": sorted(failed),
         "keep_days": KEEP_DAYS,
-        "cities": {n: {"lat": la, "lon": lo, "border": n in rc.BORDER_CITIES} for n, (la, lo) in rc.COORDS.items()},
+        "cities": {n: {"lat": la, "lon": lo, "border": n in rc.BORDER_CITIES, "r": rc.CITY_REGION.get(n, "")} for n, (la, lo) in rc.COORDS.items()},
         "events": ev,
+        "threats": thr,
     }
     txt = json.dumps(out, ensure_ascii=False, separators=(",", ":"))
     for d in (DATA, WWW):

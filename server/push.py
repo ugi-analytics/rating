@@ -14,7 +14,10 @@ import json
 import os
 import subprocess
 import sys
+import time
 from pathlib import Path
+
+import rating_core as rc
 
 EXT = None
 
@@ -49,6 +52,7 @@ class Push:
         self.key_f = data_dir / "vapid_private.pem"
         self.subs_f = data_dir / "push_subs.json"
         self.public = None
+        self.last_thr = {}
         try:
             self.subs = json.loads(self.subs_f.read_text())
         except Exception:
@@ -121,9 +125,41 @@ class Push:
         except Exception:
             return False
 
+    def _threat_payload(self, d):
+        where = d["c"] or d["r"]
+        return json.dumps({"title": f"{d['ic']} {where}: {d['kn']}", "body": f"{d['t'][11:16]} · {d['x']}",
+                           "tag": f"rv-thr-{where}", "url": "https://ugi-analytics.github.io/rating/#threats"}, ensure_ascii=False)
+
+    async def notify_threat(self, d):
+        now = time.time()
+        payload = self._threat_payload(d)
+        target = d["c"] or d["r"]
+        gone = []
+        for ep, s in list(self.subs.items()):
+            cities = s.get("cities", [])
+            regs = {rc.CITY_REGION.get(c) for c in cities}
+            hit = s.get("all") or (d["c"] and d["c"] in cities) or (not d["c"] and d["r"] in regs)
+            if not hit:
+                continue
+            key = (ep, target)
+            last_t, last_k = self.last_thr.get(key, (0, ""))
+            urgent = d["k"] in ("bal", "rkt", "fast") and last_k not in ("bal", "rkt", "fast")
+            if now - last_t < (240 if d["c"] else 600) and not urgent:
+                continue
+            self.last_thr[key] = (now, d["k"])
+            r = await asyncio.to_thread(self._send, s["sub"], payload)
+            if r == "gone":
+                gone.append(ep)
+        for ep in gone:
+            self.subs.pop(ep, None)
+        if gone:
+            self.save()
+
     async def notify(self, e):
         if not self.ok or not self.subs:
             return
+        if e.get("type") == "threat":
+            return await self.notify_threat(e)
         t = e["t"]
         cas = []
         if e.get("k"):

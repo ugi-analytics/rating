@@ -232,7 +232,7 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
 
 /* ===== Живий режим ===== */
 .live { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 18px; margin: 16px 0 4px; }
-.live[hidden], .mycard[hidden] { display: none; }
+.live[hidden], .mycard[hidden], .threats[hidden] { display: none; }
 .seg { display: inline-flex; background: rgba(22,27,34,.75); border: 1px solid var(--border); border-radius: 10px; padding: 3px; }
 .seg button { font: 600 13px var(--f-body); color: var(--text-secondary); background: none; border: 0; border-radius: 7px; padding: 6px 12px; cursor: pointer; }
 .seg button[aria-pressed="true"] { background: var(--accent); color: #1a1109; }
@@ -241,6 +241,23 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
 .tog input { accent-color: var(--accent); width: 15px; height: 15px; }
 .mycity { display: inline-flex; align-items: center; gap: 8px; color: var(--text-secondary); font-size: 13px; }
 .mycity select { font: 600 13px var(--f-body); color: var(--text-primary); background: rgba(22,27,34,.85); border: 1px solid var(--border); border-radius: 8px; padding: 6px 10px; }
+.threats { margin: 14px 0 0; background: rgba(22,27,34,.7); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
+  border: 1px solid var(--border); border-left: 3px solid var(--injured); border-radius: 14px; padding: 12px 18px; scroll-margin-top: 12px; }
+.th-head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.th-head h2 { margin: 0; font: 700 17px var(--f-display); }
+.th-head .th-note { color: var(--text-muted); font-size: 12.5px; }
+.th-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--injured); display: inline-block; animation: thp 1.6s ease-in-out infinite; align-self: center; }
+@keyframes thp { 50% { opacity: .25; } }
+@media (prefers-reduced-motion: reduce) { .th-dot { animation: none; } }
+.th-list { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 2px; }
+.th-list li { display: grid; grid-template-columns: 46px 118px 1fr; gap: 10px; align-items: baseline; font-size: 13px; padding: 6px 8px; border-radius: 8px; color: var(--text-secondary); }
+.th-list li.mine { background: rgba(242,181,68,.12); }
+.th-list time { font: 600 12.5px var(--f-mono); color: var(--text-primary); }
+.th-list b { color: var(--text-primary); font-weight: 700; }
+.th-list .th-k { color: var(--injured); font-weight: 600; white-space: nowrap; }
+.th-list a { color: var(--accent); text-decoration: none; white-space: nowrap; }
+.th-quiet { color: var(--text-muted); font-size: 13px; margin: 6px 0 0; }
+@media (max-width: 700px) { .th-list li { grid-template-columns: 42px 1fr; } .th-list li > span:last-child { grid-column: 1 / -1; } }
 .mycard { margin: 14px 0 0; background: rgba(22,27,34,.7); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
   border: 1px solid var(--border); border-left: 3px solid var(--accent); border-radius: 14px; padding: 14px 18px; }
 .mc-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
@@ -282,6 +299,7 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
     <label class="tog"><input type="checkbox" id="lvBorder"> з містами ближче до фронту</label>
     <label class="mycity">Моє місто <select id="lvCity"><option value="">— вибрати —</option></select></label>
   </div>
+  <section class="threats" id="threats" hidden aria-live="polite"></section>
   <section class="mycard" id="myCard" hidden></section>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -972,6 +990,27 @@ renderReport(DATA);
     };
   }
 
+  // ---- «Загрози зараз»: попередження «що куди летить» за останню годину ----
+  function threatsCard() {
+    const box = $('threats');
+    if (!J || !Array.isArray(J.threats)) { box.hidden = true; return; }
+    const now = Date.now(), H = 60 * 60000;
+    const myReg = my && J.cities[my] ? J.cities[my].r : '';
+    const fresh = J.threats.filter(d => now - Date.parse(d.t) < H);
+    const latest = {}; fresh.forEach(d => { const w = d.c || d.r; if (!latest[w] || d.t > latest[w].t) latest[w] = d; });
+    const rows = Object.values(latest).sort((a, b) => b.t.localeCompare(a.t)).slice(0, 14);
+    const mine = d => my && (d.c === my || (!d.c && d.r === myReg));
+    rows.sort((a, b) => (mine(b) - mine(a)) || b.t.localeCompare(a.t));
+    const last = J.threats[0];
+    box.innerHTML = `<div class="th-head">${rows.length ? '<span class="th-dot" aria-hidden="true"></span>' : ''}<h2>Загрози зараз</h2>
+      <span class="th-note">${rows.length ? `попередження за останню годину · ${rows.length} ${rows.length === 1 ? 'напрямок' : rows.length < 5 ? 'напрямки' : 'напрямків'}` : 'за останню годину попереджень немає'}</span></div>` +
+      (rows.length ? `<ul class="th-list">${rows.map(d => `<li class="${mine(d) ? 'mine' : ''}"><time>${d.t.slice(11, 16)}</time>
+        <span class="th-k">${d.ic} ${esc(d.kn)}</span><span><b>${esc(d.c || d.r)}</b> — ${esc(d.x.length > 150 ? d.x.slice(0, 150) + '…' : d.x)}
+        <a href="https://t.me/${encodeURIComponent(d.ch)}/${d.id}" target="_blank" rel="noopener">@${esc(d.ch)}</a></span></li>`).join('')}</ul>`
+        : `<p class="th-quiet">${last ? `Останнє попередження: ${esc(last.c || last.r)} (${esc(last.kn)}) о ${last.t.slice(11, 16)}${last.t.slice(0, 10) !== kyiv(new Date(now)).slice(0, 10) ? ', ' + fdm(last.t).slice(0, 5) : ''}.` : 'Сервер стежить за каналами Повітряних сил і ОВА.'}</p>`);
+    box.hidden = false;
+  }
+
   function toast(html) { const t = $('toast'); t.innerHTML = html; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 9000); }
 
   function notifyNew(prevJ) {
@@ -1000,12 +1039,13 @@ renderReport(DATA);
       Object.keys(J.cities).sort((a, b) => a.localeCompare(b, 'uk')).forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
     }
     sel.value = my;
-    sel.onchange = () => { my = sel.value; ls.set('rv_city', my); if (pushCity && pushCity !== '*') { (my ? pushSubscribe(my) : pushOff()).catch(() => {}).then(myCard); } myCard(); };
+    sel.onchange = () => { my = sel.value; ls.set('rv_city', my); if (pushCity && pushCity !== '*') { (my ? pushSubscribe(my) : pushOff()).catch(() => {}).then(myCard); } myCard(); threatsCard(); };
   }
 
   function render() {
     const y = scrollY;
     renderReport(build());
+    threatsCard();
     myCard();
     scrollTo(0, y);
   }
@@ -1027,7 +1067,7 @@ renderReport(DATA);
       if (!nj) return;
       if (J && nj.updated === J.updated) return;
       if (J && nj.rev && nj.rev === J.rev) {     // подій не додалось — лише «пульс»: оновлюємо час у статусі
-        J.updated = nj.updated;
+        J.updated = nj.updated; threatsCard();
         const st = $('status'), u = kyiv(new Date(J.updated));
         if (st) { st.querySelector('span').innerHTML = `оновлено 0 хв тому<span class="st-date"> · ${u.slice(8, 10)}.${u.slice(5, 7)} ${u.slice(11, 16)}</span>`; st.className = 'status'; }
         return;

@@ -190,7 +190,7 @@ class Notifier:
                     await self.push.notify(e)
                 except Exception as ex:
                     self.log(f"! push: {type(ex).__name__}: {ex}")
-            if not self.client:
+            if not self.client or e.get("type") == "threat":
                 continue
             t = e["t"]
             border = " (ближче до фронту)" if e["c"] in rc.BORDER_CITIES else ""
