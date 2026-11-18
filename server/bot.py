@@ -90,6 +90,27 @@ class Notifier:
                     return True
             raise RuntimeError("BotFather не прийняв жодне ім'я: " + r.raw_text[:200])
 
+    async def rebrand(self, user_client):
+        """Одноразово оновлює назву й опис бота через @BotFather (від службового акаунта)."""
+        flag = self.data / "bot_brand_v1"
+        if flag.exists() or not self.me:
+            return
+        u = "@" + self.me.username
+        steps = [("/setname", u, "Небо над містом"),
+                 ("/setdescription", u, "Попередження про повітряні загрози та влучання в тилових містах України — з офіційних і моніторингових каналів. Напишіть назву свого міста."),
+                 ("/setabouttext", u, "Небо над містом: що летить, куди влучило, як живе твоє місто. ugi-analytics.github.io/rating")]
+        try:
+            async with user_client.conversation("BotFather", timeout=40) as conv:
+                for cmd, who, val in steps:
+                    for m in (cmd, who, val):
+                        await asyncio.sleep(1.5)
+                        await conv.send_message(m)
+                        await conv.get_response()
+            flag.write_text("ok")
+            self.log("Бота перейменовано: «Небо над містом»")
+        except Exception as e:
+            self.log(f"! перейменування бота: {type(e).__name__}: {e}")
+
     # ---------- запуск бота ----------
     async def start(self):
         if not self.token_f.exists():
@@ -132,12 +153,12 @@ class Notifier:
         @c.on(events.NewMessage(pattern=r"^/(start|help)"))
         async def start(ev):
             await ev.respond(
-                "Я надсилаю сповіщення, щойно в офіційних каналах ОВА та міських голів "
+                "<b>Небо над містом</b>\nЯ надсилаю сповіщення, щойно в офіційних каналах ОВА та міських голів "
                 "з'являється повідомлення про влучання чи вибух у вашому місті.\n\n"
                 "• Напишіть назву міста — додати або прибрати його (наприклад: <code>Полтава</code>)\n"
                 "• /all — усі міста\n• /my — мої міста\n• /cities — список міст\n• /stop — вимкнути все\n\n"
                 + self._status(ev.chat_id), parse_mode="html",
-                buttons=[Button.url("Відкрити рейтинг", APP_URL)])
+                buttons=[Button.url("Відкрити «Небо над містом»", APP_URL)])
 
         @c.on(events.NewMessage(pattern=r"^/my"))
         async def my(ev):

@@ -9,10 +9,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="Влучання">
+<meta name="apple-mobile-web-app-title" content="Небо">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="icon" type="image/png" href="favicon-32.png">
-<title>Рейтинг тилових міст за влучаннями</title>
+<title>Небо над містом — загрози й влучання в тилових містах</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Manrope:wght@400;600;700&family=Unbounded:wght@500;700&display=swap">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
@@ -148,6 +148,7 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; white-sp
 
 /* ===== Оперативний штаб ===== */
 header.hq { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 22px; }
+.tagline { margin: -2px 0 6px; font: 500 15px var(--f-body); color: var(--text-secondary); }
 .brand { display: flex; align-items: center; gap: 10px; font: 500 13px var(--f-display); color: var(--text-secondary); }
 .brand svg { width: 26px; height: 26px; color: var(--text-secondary); }
 .status { display: inline-flex; align-items: center; gap: 8px; font: 500 12px var(--f-mono); color: var(--text-secondary);
@@ -287,11 +288,13 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
 <canvas id="heroBg" aria-hidden="true"></canvas>
 <div class="wrap">
   <header class="hq">
-    <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="16" cy="25" rx="11" ry="3.4" fill="none" stroke="currentColor" stroke-opacity=".45" stroke-width="1.6"/><path d="M16 3.5a8.5 8.5 0 0 0-8.5 8.5c0 6.2 8.5 13.5 8.5 13.5s8.5-7.3 8.5-13.5A8.5 8.5 0 0 0 16 3.5z" fill="#e8ecf1"/><circle cx="16" cy="12" r="3.6" fill="#ff7a2f"/></svg><span>Влучання</span></div>
+    <div class="brand"><svg viewBox="0 0 32 32" aria-hidden="true"><circle cx="20" cy="10" r="7" fill="none" stroke="#ff7a2f" stroke-opacity=".45" stroke-width="1.5"/><circle cx="20" cy="10" r="3.2" fill="#ff7a2f"/><path d="M3 29V20h4v-3h4v5h3v-7h5v8h3v-4h4v4h3v6z" fill="#e8ecf1" fill-opacity=".85"/></svg><span>Моніторинг тилових міст</span></div>
     <div class="status" id="status"><i></i><span></span></div>
   </header>
-  <h1 class="title">Рейтинг тилових міст за влучаннями</h1>
+  <h1 class="title">Небо над містом</h1>
+  <p class="tagline">Що летить, куди влучило, як живе твоє місто</p>
   <div class="sub" id="sub"></div>
+  <section class="threats" id="threats" hidden aria-live="polite"></section>
   <div class="live" id="live" hidden>
     <div class="seg" role="group" aria-label="Період">
       <button data-w="1">Доба</button><button data-w="7">7 днів</button><button data-w="30">30 днів</button><button data-w="all">Весь період</button>
@@ -299,7 +302,6 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
     <label class="tog"><input type="checkbox" id="lvBorder"> з містами ближче до фронту</label>
     <label class="mycity">Моє місто <select id="lvCity"><option value="">— вибрати —</option></select></label>
   </div>
-  <section class="threats" id="threats" hidden aria-live="polite"></section>
   <section class="mycard" id="myCard" hidden></section>
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
@@ -314,7 +316,7 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
       <div id="map"></div>
     </section>
     <section class="card rank">
-      <h2>Рейтинг міст
+      <h2>Де влучало найчастіше
         <span class="tabs" role="group" aria-label="Вигляд">
           <button id="vChart" aria-pressed="true">Графік</button><button id="vTable" aria-pressed="false">Таблиця</button>
         </span>
@@ -537,7 +539,7 @@ window.renderReport = function (DATA) {
     if (!C.length) return;
     const W = box.clientWidth || 600, rowH = 26, padT = 4, labW = 132, valW = 92;
     const H = padT + C.length * rowH + 4;
-    const svg = el('svg', { width: W, height: H, role: 'img', 'aria-label': 'Рейтинг міст за кількістю подій' }, box);
+    const svg = el('svg', { width: W, height: H, role: 'img', 'aria-label': 'Де влучало найчастіше: міста за кількістю подій' }, box);
     const max = Math.max(...C.map(c => c.events));
     const x = v => (W - labW - valW) * v / max;
     // gridlines (recessive)
@@ -974,7 +976,7 @@ renderReport(DATA);
     const on = pushCity === my || pushCity === '*';
     nb.hidden = false;
     nb.disabled = perm === 'denied';
-    nb.textContent = perm === 'denied' ? 'Сповіщення заблоковано в браузері' : on ? '🔔 Сповіщення увімкнено' : '🔕 Сповіщати про влучання';
+    nb.textContent = perm === 'denied' ? 'Сповіщення заблоковано в браузері' : on ? '🔔 Сповіщення увімкнено' : '🔕 Попереджати про загрози й влучання';
     nb.title = on ? 'Натисніть, щоб вимкнути' : 'Сповіщення прийдуть, навіть коли додаток закритий';
     nb.onclick = async () => {
       nb.disabled = true;
@@ -983,7 +985,7 @@ renderReport(DATA);
         else {
           if (await Notification.requestPermission() !== 'granted') throw new Error('perm');
           await pushSubscribe(my);
-          toast(`<b>Сповіщення увімкнено</b><br>Щойно з'явиться допис про влучання в місті ${esc(my)}, прийде сповіщення — навіть коли додаток закритий.`);
+          toast(`<b>Сповіщення увімкнено</b><br>Попереджатиму, щойно щось летітиме на ${esc(my)} чи область або з'явиться допис про влучання — навіть коли додаток закритий.`);
         }
       } catch (e) { toast(e.message === 'perm' ? 'Дозвіл на сповіщення не надано. Його можна ввімкнути в налаштуваннях браузера для цього сайту.' : 'Не вдалося ввімкнути сповіщення. Спробуйте пізніше.'); }
       myCard();

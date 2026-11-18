@@ -317,6 +317,7 @@ async def main():
             await notifier.create_via_botfather(client)
         if await notifier.start():
             BOT["name"] = notifier.me.username
+            asyncio.create_task(notifier.rebrand(client))
     except Exception as e:
         BOT["err"] = f"{type(e).__name__}: {e}"[:300]
         log(f"! Бот не запустився: {BOT['err']}")

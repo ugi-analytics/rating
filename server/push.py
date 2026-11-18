@@ -108,7 +108,7 @@ class Push:
         if not s:
             return
         what = "усі міста" if s.get("all") else ", ".join(s.get("cities", []))
-        payload = json.dumps({"title": "🔔 Сповіщення увімкнено", "body": f"Стежу за: {what}. Щойно з'явиться допис про влучання — прийде сповіщення.",
+        payload = json.dumps({"title": "🔔 Небо над містом: сповіщення увімкнено", "body": f"Стежу за: {what}. Щойно з'явиться допис про влучання — прийде сповіщення.",
                               "tag": "rv-confirm", "url": "https://ugi-analytics.github.io/rating/"}, ensure_ascii=False)
         r = await asyncio.to_thread(self._send, s["sub"], payload)
         self.log(f"Тестове push-сповіщення: {r}")
