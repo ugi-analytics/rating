@@ -332,6 +332,16 @@ async def main():
     await client.catch_up()
     tasks = [asyncio.create_task(writer()), asyncio.create_task(resolve_and_join(client)),
              asyncio.create_task(catch_up_loop(client))]
+
+    async def _discover():
+        await RESOLVED.wait()
+        await asyncio.sleep(60)
+        try:
+            import discover
+            await discover.run(client, ROOT, DATA, WWW, {c.lower() for c in channels}, log)
+        except Exception as e:
+            log(f"! пошук каналів: {type(e).__name__}: {e}")
+    tasks.append(asyncio.create_task(_discover()))
     try:
         await client.run_until_disconnected()
     finally:
