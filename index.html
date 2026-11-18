@@ -417,7 +417,7 @@ window.renderReport = function (DATA) {
   const kill = C.reduce((s, c) => s + c.killed, 0);
   const inj = C.reduce((s, c) => s + c.injured, 0);
   document.getElementById('sub').innerHTML =
-    `Період <b>${fd(M.from)} – ${fd(M.to)}</b> · каналів: <b>${M.channels ?? '—'}</b>` +
+    `Період <b>${fd(M.from)} – ${fd(M.to)}</b> · каналів: <b>${M.channels ?? '—'}</b> для рейтингу` + (M.tchannels ? ` і <b>${M.tchannels}</b> для попереджень` : '') +
     (M.border ? ' · разом з містами ближче до фронту' : ' · лише тилові міста') +
     '';
   (function status() {
@@ -885,7 +885,7 @@ renderReport(DATA);
     const firstDay = ev.length ? ev[ev.length - 1].t.slice(0, 10) : '';
     return {
       cities, weeks: keys, weekly, log,
-      meta: { from: days ? kyiv(new Date(from)).slice(0, 10) : firstDay, to: kyiv(new Date(now)).slice(0, 10), channels: J.channels, border,
+      meta: { from: days ? kyiv(new Date(from)).slice(0, 10) : firstDay, to: kyiv(new Date(now)).slice(0, 10), channels: J.channels, tchannels: J.threat_channels, border,
               generated: u ? `${u.slice(8, 10)}.${u.slice(5, 7)}.${u.slice(0, 4)} ${u.slice(11, 16)}` : '', mode: 'full', live: true,
               bucket, unit: hourly ? 'година' : 'доба' }
     };

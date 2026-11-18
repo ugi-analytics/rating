@@ -195,6 +195,8 @@ async def resolve_and_join(client):
                 continue
             else:
                 ip = await client.get_input_entity(ch)
+                if not hasattr(ip, "channel_id"):
+                    raise ValueError("це не канал, а особистий акаунт чи бот")
                 peers[ch.lower()] = {"id": ip.channel_id, "hash": ip.access_hash}
                 _peers_save(peers)
                 await asyncio.sleep(2)
