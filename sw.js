@@ -1,7 +1,7 @@
 // Рейтинг влучань — офлайн-режим: сторінка звіту завжди спершу з мережі (щоб бачити свіжий звіт),
 // без інтернету — остання збережена копія.
-const CACHE = 'rv-v6';
-const CORE = ['./', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
+const CACHE = 'rv-v7';
+const CORE = ['./', './manifest.webmanifest', './sky-192.png', './sky-512.png'];
 
 self.addEventListener('install', e => {
   self.skipWaiting();
@@ -54,7 +54,7 @@ self.addEventListener('push', e => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: 'Рейтинг влучань', body: e.data ? e.data.text() : '' }; }
   e.waitUntil(self.registration.showNotification(d.title || 'Рейтинг влучань', {
-    body: d.body || '', tag: d.tag, icon: 'icon-192.png', badge: 'favicon-32.png',
+    body: d.body || '', tag: d.tag, icon: 'sky-192.png', badge: 'sky-favicon-32.png',
     data: { url: d.url || './' }, renotify: true, vibrate: [200, 100, 200]
   }));
 });

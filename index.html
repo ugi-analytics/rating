@@ -10,8 +10,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Небо">
-<link rel="apple-touch-icon" href="icon-180.png">
-<link rel="icon" type="image/png" href="favicon-32.png">
+<link rel="apple-touch-icon" href="sky-180.png">
+<link rel="icon" type="image/png" href="sky-favicon-32.png">
 <title>Небо над містом — загрози й влучання в тилових містах</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;700&family=Manrope:wght@400;600;700&family=Unbounded:wght@500;700&display=swap">
@@ -363,7 +363,7 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
 </div>
 <div class="foot" id="foot">Показано топ-15 міст. Повний рейтинг, динаміка по тижнях і жертви — у PDF-файлі звіту.</div>
 <div class="tip" id="tip"></div>
-<div class="install" id="install"><img src="icon-192.png" alt=""><div class="tx" id="instTx"><b>Встановити як додаток</b>Значок на екрані, відкривається на весь екран і працює без інтернету.</div><button class="go" id="instGo">Встановити</button><button class="no" id="instNo" aria-label="Закрити">✕</button></div>
+<div class="install" id="install"><img src="sky-192.png" alt=""><div class="tx" id="instTx"><b>Встановити як додаток</b>Значок на екрані, відкривається на весь екран і працює без інтернету.</div><button class="go" id="instGo">Встановити</button><button class="no" id="instNo" aria-label="Закрити">✕</button></div>
 </div>
 
 <script>
@@ -1024,7 +1024,7 @@ renderReport(DATA);
     const text = `${my}, ${fdm(e.t)}: ${e.x.slice(0, 140)}${e.x.length > 140 ? '…' : ''}`;
     toast(`<b>Нова подія</b><br>${esc(text)}`);
     if (!pushCity && 'Notification' in window && Notification.permission === 'granted') {
-      try { new Notification('Влучання: ' + my, { body: text, icon: 'icon-192.png', tag: 'rv-' + my }); } catch (er) {}
+      try { new Notification('Небо над містом: ' + my, { body: text, icon: 'sky-192.png', tag: 'rv-' + my }); } catch (er) {}
     }
   }
 
