@@ -1,0 +1,136 @@
+# -*- coding: utf-8 -*-
+"""
+Web Push-сповіщення в додаток «Рейтинг влучань» (PWA): приходять, навіть коли додаток закритий.
+
+* Ключі VAPID створюються один раз: /var/lib/rating/vapid_private.pem; публічний ключ іде в events.json.
+* Підписки: /var/lib/rating/push_subs.json  {endpoint: {"sub": {...}, "cities": [...], "all": bool}}
+* HTTP (Caddy проксіює /login* на 127.0.0.1:8099):
+    POST /login/push/subscribe    {"sub": PushSubscription.toJSON(), "cities": ["Полтава"], "all": false}
+    POST /login/push/unsubscribe  {"endpoint": "..."}
+"""
+import asyncio
+import base64
+import json
+import os
+import subprocess
+import sys
+from pathlib import Path
+
+EXT = None
+
+
+def ensure_deps(data_dir: Path, log):
+    """pywebpush ставиться в /var/lib/rating/pyext (сервіс працює без прав root)."""
+    global EXT
+    EXT = data_dir / "pyext"
+    if str(EXT) not in sys.path:
+        sys.path.insert(0, str(EXT))
+    try:
+        import pywebpush  # noqa: F401
+        return True
+    except ImportError:
+        pass
+    log("Встановлюю pywebpush…")
+    env = dict(os.environ, HOME=str(data_dir), PIP_DISABLE_PIP_VERSION_CHECK="1")
+    r = subprocess.run([sys.executable, "-m", "pip", "install", "-q", "--target", str(EXT), "pywebpush"],
+                       env=env, capture_output=True, text=True, timeout=600)
+    if r.returncode:
+        log("! pywebpush не встановився: " + (r.stderr or r.stdout)[-300:])
+        return False
+    import importlib
+    importlib.invalidate_caches()
+    return True
+
+
+class Push:
+    def __init__(self, data_dir: Path, log):
+        self.data, self.log = data_dir, log
+        self.ok = ensure_deps(data_dir, log)
+        self.key_f = data_dir / "vapid_private.pem"
+        self.subs_f = data_dir / "push_subs.json"
+        self.public = None
+        try:
+            self.subs = json.loads(self.subs_f.read_text())
+        except Exception:
+            self.subs = {}
+        if self.ok:
+            self._keys()
+
+    def _keys(self):
+        from py_vapid import Vapid01
+        from cryptography.hazmat.primitives import serialization
+        if not self.key_f.exists():
+            v = Vapid01()
+            v.generate_keys()
+            v.save_key(str(self.key_f))
+            os.chmod(self.key_f, 0o600)
+        v = Vapid01.from_file(str(self.key_f))
+        raw = v.public_key.public_bytes(serialization.Encoding.X962, serialization.PublicFormat.UncompressedPoint)
+        self.public = base64.urlsafe_b64encode(raw).decode().rstrip("=")
+        self.log(f"Push готовий, підписок: {len(self.subs)}")
+
+    def save(self):
+        tmp = self.subs_f.with_suffix(".tmp")
+        tmp.write_text(json.dumps(self.subs, ensure_ascii=False))
+        os.replace(tmp, self.subs_f)
+
+    # ---------- HTTP ----------
+    def api(self, path, body: bytes):
+        """Повертає (статус, dict)."""
+        try:
+            d = json.loads(body or b"{}")
+        except Exception:
+            return "400 Bad Request", {"ok": False}
+        if path == "/login/push/subscribe":
+            sub = d.get("sub") or {}
+            ep = sub.get("endpoint", "")
+            if not ep.startswith("https://") or not (sub.get("keys") or {}).get("p256dh"):
+                return "400 Bad Request", {"ok": False}
+            cities = [c for c in (d.get("cities") or []) if isinstance(c, str)][:60]
+            self.subs[ep] = {"sub": sub, "cities": cities, "all": bool(d.get("all"))}
+            self.save()
+            self.log(f"Push-підписка: {', '.join(cities) or 'усі міста'} (усього {len(self.subs)})")
+            return "200 OK", {"ok": True}
+        if path == "/login/push/unsubscribe":
+            if self.subs.pop(d.get("endpoint", ""), None):
+                self.save()
+            return "200 OK", {"ok": True}
+        return "404 Not Found", {"ok": False}
+
+    # ---------- розсилка ----------
+    def _send(self, sub, payload):
+        from pywebpush import webpush, WebPushException
+        try:
+            webpush(subscription_info=sub, data=payload, vapid_private_key=str(self.key_f),
+                    vapid_claims={"sub": "mailto:rating@ugi-analytics.github.io"}, ttl=3600,
+                    headers={"Urgency": "high"})
+            return True
+        except WebPushException as e:
+            code = getattr(e.response, "status_code", None)
+            return "gone" if code in (404, 410) else False
+        except Exception:
+            return False
+
+    async def notify(self, e):
+        if not self.ok or not self.subs:
+            return
+        t = e["t"]
+        cas = []
+        if e.get("k"):
+            cas.append(f"загиблі: {e['k']}")
+        if e.get("i"):
+            cas.append(f"поранені: {e['i']}")
+        body = (f"{t[11:16]} · " + ("; ".join(cas) + " · " if cas else "") + e["x"][:180]).replace("\n", " ")
+        payload = json.dumps({"title": f"💥 Влучання: {e['c']}", "body": body, "city": e["c"],
+                              "tag": f"rv-{e['c']}-{e['ch']}-{e['id']}",
+                              "url": "https://ugi-analytics.github.io/rating/?city=" + e["c"]}, ensure_ascii=False)
+        gone = []
+        for ep, s in list(self.subs.items()):
+            if s.get("all") or e["c"] in s.get("cities", []):
+                r = await asyncio.to_thread(self._send, s["sub"], payload)
+                if r == "gone":
+                    gone.append(ep)
+        for ep in gone:
+            self.subs.pop(ep, None)
+        if gone:
+            self.save()

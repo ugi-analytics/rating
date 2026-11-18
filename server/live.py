@@ -51,7 +51,7 @@ channels = []
 ENV = {}
 bot = None                     # клієнт Telegram-бота сповіщень
 notify_q = None              # черга нових подій для бота
-BOT = {"name": None, "err": None}
+BOT = {"name": None, "err": None, "vapid": None}
 subs = {}                      # chat_id -> {"cities": [...], "all": bool}
 NOTIFY_MAX_AGE = 90 * 60       # не сповіщати про дописи, старші за 90 хв (наприклад, під час дочитування)
 
@@ -103,6 +103,8 @@ def write():
         "live": True,
         "bot": BOT["name"],
         "bot_error": BOT["err"],
+        "vapid": BOT["vapid"],
+        "push_api": "/login/push/",
         "channels": len(channels),
         "channels_failed": sorted(failed),
         "keep_days": KEEP_DAYS,
@@ -214,6 +216,13 @@ async def main():
     from bot import Notifier
     notifier = Notifier(DATA, int(env["TG_API_ID"]), env["TG_API_HASH"], log)
     notify_q = notifier.q
+    try:
+        from push import Push
+        notifier.push = await asyncio.to_thread(Push, DATA, log)
+        BOT["vapid"] = notifier.push.public
+    except Exception as e:
+        log(f"! Push не запустився: {type(e).__name__}: {e}")
+    notifier.run_sender()
     try:
         if not notifier.token_f.exists() and not (DATA / "botfather_tried").exists():
             (DATA / "botfather_tried").write_text(datetime.now(KYIV).isoformat())

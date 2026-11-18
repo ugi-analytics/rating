@@ -1,6 +1,6 @@
 // Рейтинг влучань — офлайн-режим: сторінка звіту завжди спершу з мережі (щоб бачити свіжий звіт),
 // без інтернету — остання збережена копія.
-const CACHE = 'rv-v3';
+const CACHE = 'rv-v4';
 const CORE = ['./', './manifest.webmanifest', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -47,4 +47,24 @@ self.addEventListener('fetch', e => {
     return;
   }
   // 3) плитки карти: лише мережа (без накопичення в пам'яті телефона)
+});
+
+// 4) push-сповіщення з сервера (приходять, навіть коли додаток закритий)
+self.addEventListener('push', e => {
+  let d = {};
+  try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: 'Рейтинг влучань', body: e.data ? e.data.text() : '' }; }
+  e.waitUntil(self.registration.showNotification(d.title || 'Рейтинг влучань', {
+    body: d.body || '', tag: d.tag, icon: 'icon-192.png', badge: 'favicon-32.png',
+    data: { url: d.url || './' }, renotify: true, vibrate: [200, 100, 200]
+  }));
+});
+
+self.addEventListener('notificationclick', e => {
+  e.notification.close();
+  const url = (e.notification.data && e.notification.data.url) || './';
+  e.waitUntil((async () => {
+    const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const w of wins) { if ('focus' in w) { w.navigate(url).catch(() => {}); return w.focus(); } }
+    return clients.openWindow(url);
+  })());
 });

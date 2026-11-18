@@ -37,6 +37,8 @@ class Notifier:
         except Exception:
             self.subs = {}
         self.cities = sorted(rc.COORDS)
+        self.push = None
+        self._sender_task = None
 
     # ---------- збереження ----------
     def save_subs(self):
@@ -102,8 +104,12 @@ class Notifier:
         self.me = await self.client.get_me()
         self.log(f"Бот сповіщень запущено: @{self.me.username}")
         self._handlers()
-        asyncio.create_task(self._sender())
+        self.run_sender()
         return True
+
+    def run_sender(self):
+        if not self._sender_task:
+            self._sender_task = asyncio.create_task(self._sender())
 
     def _match(self, text):
         t = text.strip().lower().replace("’", "'").replace("ʼ", "'")
@@ -179,6 +185,13 @@ class Notifier:
     async def _sender(self):
         while True:
             e = await self.q.get()
+            if self.push:
+                try:
+                    await self.push.notify(e)
+                except Exception as ex:
+                    self.log(f"! push: {type(ex).__name__}: {ex}")
+            if not self.client:
+                continue
             t = e["t"]
             border = " (ближче до фронту)" if e["c"] in rc.BORDER_CITIES else ""
             cas = []
@@ -224,6 +237,19 @@ button{margin-top:18px;width:100%;padding:12px;border:0;border-radius:8px;backgr
             body = await reader.readexactly(int(hdr.get("content-length") or 0)) if hdr.get("content-length") else b""
             path = urlparse(target).path
             status, out = "200 OK", ""
+            if path.startswith("/login/push/"):
+                if method == "OPTIONS":
+                    st, data, ct = "204 No Content", b"", "text/plain"
+                elif self.push and self.push.ok and method == "POST":
+                    st, obj = self.push.api(path, body)
+                    data, ct = json.dumps(obj).encode(), "application/json"
+                else:
+                    st, data, ct = "503 Service Unavailable", b"{}", "application/json"
+                writer.write((f"HTTP/1.1 {st}\r\nContent-Type: {ct}\r\nContent-Length: {len(data)}\r\n"
+                              "Access-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n"
+                              "Access-Control-Max-Age: 86400\r\nConnection: close\r\n\r\n").encode() + data)
+                await writer.drain()
+                return
             if path != "/login/bot":
                 status, out = "404 Not Found", "-"
             elif method == "POST":

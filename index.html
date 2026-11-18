@@ -821,6 +821,7 @@ renderReport(DATA);
   const fdm = t => `${t.slice(8, 10)}.${t.slice(5, 7)} ${t.slice(11, 16)}`;
 
   let J = null, win = ls.get('rv_win', '30'), border = ls.get('rv_border', '1') === '1', my = ls.get('rv_city', '');
+  { const qc = new URLSearchParams(location.search).get('city'); if (qc) { my = qc; ls.set('rv_city', qc); } }
 
   function build() {
     const now = Date.now();
@@ -909,13 +910,66 @@ renderReport(DATA);
       ${spark}
       <ul class="mc-feed">${feed.map(e => `<li class="${seenT && e.t > seenT ? 'new' : ''}"><time>${fdm(e.t)}</time><span>${esc(e.x.length > cut ? e.x.slice(0, cut) + '…' : e.x)} <a href="https://t.me/${encodeURIComponent(e.ch)}/${e.id}" target="_blank" rel="noopener">@${esc(e.ch)}</a></span></li>`).join('')}</ul>`;
     box.hidden = false;
-    const nb = $('mcNotify');
-    const perm = ('Notification' in window) ? Notification.permission : 'unsupported';
-    nb.textContent = perm === 'granted' ? 'Сповіщення увімкнено' : perm === 'denied' ? 'Сповіщення заблоковано' : 'Сповіщати про нові події';
-    nb.hidden = perm === 'unsupported';
-    nb.disabled = perm !== 'default';
-    nb.onclick = async () => { try { await Notification.requestPermission(); } catch (e) {} myCard(); };
+    pushButton($('mcNotify'));
     if (last) ls.set('rv_seen_' + my, last.t);
+  }
+
+  // ---- push-сповіщення (працюють і при закритому додатку) ----
+  const API = SRCS[0].replace(/\/events\.json$/, '');
+  const pushable = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window && /^https:/.test(location.protocol);
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone;
+  const b64u8 = b => { const p = '='.repeat((4 - b.length % 4) % 4); const r = atob((b + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(r, c => c.charCodeAt(0)); };
+  let pushCity = ls.get('rv_push', '');            // місто, на яке оформлено push ('*' — усі)
+
+  async function pushSubscribe(city) {
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u8(J.vapid) });
+    const r = await fetch(API + '/login/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sub: sub.toJSON(), cities: city === '*' ? [] : [city], all: city === '*' }) });
+    if (!r.ok) throw new Error('server ' + r.status);
+    pushCity = city; ls.set('rv_push', city);
+  }
+  async function pushOff() {
+    try {
+      const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
+      if (sub) { await fetch(API + '/login/push/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => {}); await sub.unsubscribe(); }
+    } catch (e) {}
+    pushCity = ''; ls.set('rv_push', '');
+  }
+
+  function pushButton(nb) {
+    const perm = ('Notification' in window) ? Notification.permission : 'unsupported';
+    const can = pushable() && J && J.vapid;
+    if (!can && isIOS && !standalone()) {
+      nb.textContent = 'Сповіщення'; nb.hidden = false; nb.disabled = false;
+      nb.onclick = () => toast('<b>Сповіщення на iPhone</b><br>Спершу встановіть додаток: «Поділитися» → «На початковий екран», відкрийте його з іконки й натисніть кнопку ще раз.');
+      return;
+    }
+    if (!can) {        // запасний варіант: сповіщення лише поки додаток відкритий
+      nb.textContent = perm === 'granted' ? 'Сповіщення увімкнено' : perm === 'denied' ? 'Сповіщення заблоковано' : 'Сповіщати про нові події';
+      nb.hidden = perm === 'unsupported'; nb.disabled = perm !== 'default';
+      nb.onclick = async () => { try { await Notification.requestPermission(); } catch (e) {} myCard(); };
+      return;
+    }
+    const on = pushCity === my || pushCity === '*';
+    nb.hidden = false;
+    nb.disabled = perm === 'denied';
+    nb.textContent = perm === 'denied' ? 'Сповіщення заблоковано в браузері' : on ? '🔔 Сповіщення увімкнено' : '🔕 Сповіщати про влучання';
+    nb.title = on ? 'Натисніть, щоб вимкнути' : 'Сповіщення прийдуть, навіть коли додаток закритий';
+    nb.onclick = async () => {
+      nb.disabled = true;
+      try {
+        if (on) { await pushOff(); toast('Сповіщення вимкнено.'); }
+        else {
+          if (await Notification.requestPermission() !== 'granted') throw new Error('perm');
+          await pushSubscribe(my);
+          toast(`<b>Сповіщення увімкнено</b><br>Щойно з'явиться допис про влучання в місті ${esc(my)}, прийде сповіщення — навіть коли додаток закритий.`);
+        }
+      } catch (e) { toast(e.message === 'perm' ? 'Дозвіл на сповіщення не надано. Його можна ввімкнути в налаштуваннях браузера для цього сайту.' : 'Не вдалося ввімкнути сповіщення. Спробуйте пізніше.'); }
+      myCard();
+    };
   }
 
   function toast(html) { const t = $('toast'); t.innerHTML = html; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 9000); }
@@ -928,7 +982,7 @@ renderReport(DATA);
     const e = fresh[0];
     const text = `${my}, ${fdm(e.t)}: ${e.x.slice(0, 140)}${e.x.length > 140 ? '…' : ''}`;
     toast(`<b>Нова подія</b><br>${esc(text)}`);
-    if ('Notification' in window && Notification.permission === 'granted') {
+    if (!pushCity && 'Notification' in window && Notification.permission === 'granted') {
       try { new Notification('Влучання: ' + my, { body: text, icon: 'icon-192.png', tag: 'rv-' + my }); } catch (er) {}
     }
   }
@@ -946,7 +1000,7 @@ renderReport(DATA);
       Object.keys(J.cities).sort((a, b) => a.localeCompare(b, 'uk')).forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
     }
     sel.value = my;
-    sel.onchange = () => { my = sel.value; ls.set('rv_city', my); myCard(); };
+    sel.onchange = () => { my = sel.value; ls.set('rv_city', my); if (pushCity && pushCity !== '*') { (my ? pushSubscribe(my) : pushOff()).catch(() => {}).then(myCard); } myCard(); };
   }
 
   function render() {
