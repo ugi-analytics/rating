@@ -49,6 +49,7 @@ dirty = True
 failed = set()
 peer2ch = {}                   # peer_id -> ім'я каналу
 channels = []
+THREAT_ONLY = set()          # канали лише для попереджень (без рейтингу), у нижньому регістрі
 ENV = {}
 bot = None                     # клієнт Telegram-бота сповіщень
 notify_q = None              # черга нових подій для бота
@@ -77,7 +78,7 @@ def load():
 
 def upsert(m, ch):
     global dirty
-    new = process_message(m, ch, city_res)
+    new = [] if ch.lower() in THREAT_ONLY else process_message(m, ch, city_res)
     old = by_msg.get((ch, m.id))
     if new or old:
         if new != old:
@@ -128,7 +129,8 @@ def write():
         "bot_error": BOT["err"],
         "vapid": BOT["vapid"],
         "push_api": "/login/push/",
-        "channels": len(channels),
+        "channels": len(channels) - len(THREAT_ONLY),
+        "threat_channels": len(THREAT_ONLY),
         "channels_failed": sorted(failed),
         "keep_days": KEEP_DAYS,
         "cities": {n: {"lat": la, "lon": lo, "border": n in rc.BORDER_CITIES, "r": rc.CITY_REGION.get(n, "")} for n, (la, lo) in rc.COORDS.items()},
@@ -154,16 +156,62 @@ async def writer():
             last = time.time()
 
 
+ENT = {}                       # канал -> InputPeerChannel (кеш, щоб не шукати канали за назвою щоразу)
+RESOLVED = asyncio.Event()
+
+
+def _peers_load():
+    try:
+        return json.loads((DATA / "peers.json").read_text())
+    except Exception:
+        return {}
+
+
+def _peers_save(p):
+    tmp = DATA / "peers.json.tmp"
+    tmp.write_text(json.dumps(p))
+    os.replace(tmp, DATA / "peers.json")
+
+
 async def resolve_and_join(client):
-    """Знаходить канали і підписується на ті, де акаунт ще не учасник."""
+    """1) знаходить канали (з кешу або за назвою); 2) поступово підписується на нові."""
+    from telethon.tl.types import InputPeerChannel
+    peers = _peers_load()
+    to_join = []
     for ch in channels:
+        rec = peers.get(ch.lower())
         try:
-            ent = await client.get_entity(ch)
-            peer2ch[utils.get_peer_id(ent)] = ch
+            if rec and rec.get("id"):
+                ip = InputPeerChannel(rec["id"], rec["hash"])
+            elif rec and time.time() - rec.get("miss", 0) < 86400:
+                failed.add(ch)                 # не знайдено менше доби тому — не шукаємо повторно
+                continue
+            else:
+                ip = await client.get_input_entity(ch)
+                peers[ch.lower()] = {"id": ip.channel_id, "hash": ip.access_hash}
+                _peers_save(peers)
+                await asyncio.sleep(2)
+            ENT[ch] = ip
+            peer2ch[utils.get_peer_id(ip)] = ch
             failed.discard(ch)
+            if not (rec and rec.get("joined")):
+                to_join.append(ch)
+        except FloodWaitError as e:
+            log(f"! FloodWait {e.seconds} с під час пошуку каналів")
+            await asyncio.sleep(e.seconds + 5)
+        except Exception as e:
+            failed.add(ch)
+            peers[ch.lower()] = {"miss": time.time()}
+            _peers_save(peers)
+            log(f"! {ch}: {type(e).__name__}: {e}")
+    RESOLVED.set()
+    log(f"Каналів знайдено: {len(ENT)}/{len(channels)}, до перевірки підписки: {len(to_join)}")
+    for ch in to_join:
+        try:
+            ent = await client.get_entity(ENT[ch])
             if getattr(ent, "left", False):
                 try:
-                    await client(JoinChannelRequest(ent))
+                    await client(JoinChannelRequest(ENT[ch]))
                     log(f"Підписано: {ch}")
                 except ChannelsTooMuchError:
                     log("! Досягнуто ліміту підписок акаунта (≈500)")
@@ -171,22 +219,25 @@ async def resolve_and_join(client):
                 await asyncio.sleep(random.uniform(*JOIN_PAUSE))
             else:
                 await asyncio.sleep(1)
+            peers[ch.lower()]["joined"] = True
+            _peers_save(peers)
         except FloodWaitError as e:
             log(f"! FloodWait {e.seconds} с під час підписки")
             await asyncio.sleep(e.seconds + 5)
         except Exception as e:
-            failed.add(ch)
-            log(f"! {ch}: {type(e).__name__}: {e}")
+            log(f"! підписка {ch}: {type(e).__name__}: {e}")
 
 
 async def catch_up(client):
     boot_from = datetime.now(KYIV) - timedelta(days=BOOT_DAYS)
     for ch in channels:
+        if ch not in ENT:
+            continue
         last = state["last_id"].get(ch)
         seen = 0
         try:
-            async for m in client.iter_messages(ch):
-                if last is None and m.date < boot_from:
+            async for m in client.iter_messages(ENT[ch]):
+                if last is None and (m.date < boot_from or (ch.lower() in THREAT_ONLY and seen >= 20)):
                     break
                 if last is not None and m.id <= last and seen >= RECHECK:
                     break
@@ -203,6 +254,7 @@ async def catch_up(client):
 
 
 async def catch_up_loop(client):
+    await RESOLVED.wait()
     while True:
         t = time.time()
         await catch_up(client)
@@ -219,6 +271,10 @@ async def main():
             env[k.strip()] = v.strip()
     session = Path("/etc/rating/session").read_text().strip()
     channels = read_channels(ROOT / "channels.txt")
+    for ch in read_channels(ROOT / "channels_threat.txt") if (ROOT / "channels_threat.txt").exists() else []:
+        if ch.lower() not in {c.lower() for c in channels}:
+            channels.append(ch)
+            THREAT_ONLY.add(ch.lower())
     load()
 
     client = TelegramClient(StringSession(session), int(env["TG_API_ID"]), env["TG_API_HASH"],
