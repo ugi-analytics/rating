@@ -19,7 +19,7 @@ from telethon.sessions import StringSession
 
 import rating_core as rc
 
-APP_URL = "https://ugi-analytics.github.io/rating/"
+APP_URL = "https://nebo-nad-mistom.pp.ua/"
 
 
 class Notifier:
@@ -92,13 +92,13 @@ class Notifier:
 
     async def rebrand(self, user_client):
         """Одноразово оновлює назву й опис бота через @BotFather (від службового акаунта)."""
-        flag = self.data / "bot_brand_v1"
+        flag = self.data / "bot_brand_v2"
         if flag.exists() or not self.me:
             return
         u = "@" + self.me.username
         steps = [("/setname", u, "Небо над містом"),
                  ("/setdescription", u, "Попередження про повітряні загрози та влучання в тилових містах України — з офіційних і моніторингових каналів. Напишіть назву свого міста."),
-                 ("/setabouttext", u, "Небо над містом: що летить, куди влучило, як живе твоє місто. ugi-analytics.github.io/rating")]
+                 ("/setabouttext", u, "Небо над містом: що летить, куди влучило, як живе твоє місто. nebo-nad-mistom.pp.ua")]
         try:
             async with user_client.conversation("BotFather", timeout=40) as conv:
                 for cmd, who, val in steps:

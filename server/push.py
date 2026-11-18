@@ -109,7 +109,7 @@ class Push:
             return
         what = "усі міста" if s.get("all") else ", ".join(s.get("cities", []))
         payload = json.dumps({"title": "🔔 Небо над містом: сповіщення увімкнено", "body": f"Стежу за: {what}. Щойно з'явиться допис про влучання — прийде сповіщення.",
-                              "tag": "rv-confirm", "url": "https://ugi-analytics.github.io/rating/"}, ensure_ascii=False)
+                              "tag": "rv-confirm", "url": "https://nebo-nad-mistom.pp.ua/"}, ensure_ascii=False)
         r = await asyncio.to_thread(self._send, s["sub"], payload)
         self.log(f"Тестове push-сповіщення: {r}")
 
@@ -145,7 +145,7 @@ class Push:
     def _threat_payload(self, d):
         where = d["c"] or d["r"]
         return json.dumps({"title": f"{d['ic']} {where}: {d['kn']}", "body": f"{d['t'][11:16]} · {d['x']}",
-                           "tag": f"rv-thr-{where}", "url": "https://ugi-analytics.github.io/rating/#threats"}, ensure_ascii=False)
+                           "tag": f"rv-thr-{where}", "url": "https://nebo-nad-mistom.pp.ua/#threats"}, ensure_ascii=False)
 
     async def notify_threat(self, d):
         now = time.time()
@@ -181,6 +181,6 @@ class Push:
         body = (f"{t[11:16]} · " + ("; ".join(cas) + " · " if cas else "") + e["x"][:180]).replace("\n", " ")
         payload = json.dumps({"title": f"💥 Влучання: {e['c']}", "body": body, "city": e["c"],
                               "tag": f"rv-{e['c']}-{e['ch']}-{e['id']}",
-                              "url": "https://ugi-analytics.github.io/rating/?city=" + e["c"]}, ensure_ascii=False)
+                              "url": "https://nebo-nad-mistom.pp.ua/?city=" + e["c"]}, ensure_ascii=False)
         targets = [ep for ep, s in list(self.subs.items()) if s.get("all") or e["c"] in s.get("cities", [])]
         await self._fanout(targets, payload)
