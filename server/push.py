@@ -15,6 +15,7 @@ import os
 import subprocess
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import rating_core as rc
@@ -53,6 +54,7 @@ class Push:
         self.subs_f = data_dir / "push_subs.json"
         self.public = None
         self.last_thr = {}
+        self.pool = ThreadPoolExecutor(max_workers=32, thread_name_prefix="push")
         try:
             self.subs = json.loads(self.subs_f.read_text())
         except Exception:
@@ -111,6 +113,21 @@ class Push:
         r = await asyncio.to_thread(self._send, s["sub"], payload)
         self.log(f"Тестове push-сповіщення: {r}")
 
+    async def _fanout(self, targets, payload):
+        """Паралельна розсилка (до 32 одночасно); прибирає підписки, яких уже не існує."""
+        targets = [ep for ep in targets if ep in self.subs]
+        if not targets:
+            return
+        loop = asyncio.get_running_loop()
+        res = await asyncio.gather(*[loop.run_in_executor(self.pool, self._send, self.subs[ep]["sub"], payload)
+                                     for ep in targets])
+        gone = [ep for ep, r in zip(targets, res) if r == "gone"]
+        for ep in gone:
+            self.subs.pop(ep, None)
+        if gone:
+            self.save()
+        self.log(f"Push: {len(targets)} адресатів, доставлено {sum(r is True for r in res)}, прибрано {len(gone)}")
+
     # ---------- розсилка ----------
     def _send(self, sub, payload):
         from pywebpush import webpush, WebPushException
@@ -134,7 +151,7 @@ class Push:
         now = time.time()
         payload = self._threat_payload(d)
         target = d["c"] or d["r"]
-        gone = []
+        targets = []
         for ep, s in list(self.subs.items()):
             cities = s.get("cities", [])
             regs = {rc.CITY_REGION.get(c) for c in cities}
@@ -147,13 +164,8 @@ class Push:
             if now - last_t < (240 if d["c"] else 600) and not urgent:
                 continue
             self.last_thr[key] = (now, d["k"])
-            r = await asyncio.to_thread(self._send, s["sub"], payload)
-            if r == "gone":
-                gone.append(ep)
-        for ep in gone:
-            self.subs.pop(ep, None)
-        if gone:
-            self.save()
+            targets.append(ep)
+        await self._fanout(targets, payload)
 
     async def notify(self, e):
         if not self.ok or not self.subs:
@@ -170,13 +182,5 @@ class Push:
         payload = json.dumps({"title": f"💥 Влучання: {e['c']}", "body": body, "city": e["c"],
                               "tag": f"rv-{e['c']}-{e['ch']}-{e['id']}",
                               "url": "https://ugi-analytics.github.io/rating/?city=" + e["c"]}, ensure_ascii=False)
-        gone = []
-        for ep, s in list(self.subs.items()):
-            if s.get("all") or e["c"] in s.get("cities", []):
-                r = await asyncio.to_thread(self._send, s["sub"], payload)
-                if r == "gone":
-                    gone.append(ep)
-        for ep in gone:
-            self.subs.pop(ep, None)
-        if gone:
-            self.save()
+        targets = [ep for ep, s in list(self.subs.items()) if s.get("all") or e["c"] in s.get("cities", [])]
+        await self._fanout(targets, payload)

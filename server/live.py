@@ -144,6 +144,10 @@ def write():
         tmp = d / "events.json.tmp"
         tmp.write_text(txt, encoding="utf-8")
         os.replace(tmp, d / "events.json")
+    # крихітний файл-«маячок»: додаток спершу перевіряє його і качає events.json лише після змін
+    tmp = WWW / "rev.json.tmp"
+    tmp.write_text(json.dumps({"rev": out["rev"], "updated": out["updated"]}), encoding="utf-8")
+    os.replace(tmp, WWW / "rev.json")
     (DATA / "state.json").write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
     dirty = False
 

@@ -1050,8 +1050,24 @@ renderReport(DATA);
     scrollTo(0, y);
   }
 
+  function pulse() {                        // сервер живий, нових даних немає: оновлюємо статус і стрічку загроз
+    threatsCard();
+    const st = $('status'), u = kyiv(new Date(J.updated));
+    if (st) { st.querySelector('span').innerHTML = `оновлено 0 хв тому<span class="st-date"> · ${u.slice(8, 10)}.${u.slice(5, 7)} ${u.slice(11, 16)}</span>`; st.className = 'status'; }
+  }
+
   async function load(first) {
     try {
+      // 1) дешева перевірка «маячка» (~100 байт): якщо даних не додалось — повний файл не качаємо
+      if (J && J.rev && !first) {
+        try {
+          const r = await fetch(API + '/rev.json?t=' + Date.now(), { cache: 'no-store' });
+          if (r.ok) {
+            const rv = await r.json();
+            if (rv.rev === J.rev) { if (rv.updated !== J.updated) { J.updated = rv.updated; pulse(); } return; }
+          }
+        } catch (e) { /* сервер недоступний — нижче спробуємо запасне джерело */ }
+      }
       let nj = null;
       for (const src of SRCS) {
         try {
@@ -1067,9 +1083,7 @@ renderReport(DATA);
       if (!nj) return;
       if (J && nj.updated === J.updated) return;
       if (J && nj.rev && nj.rev === J.rev) {     // подій не додалось — лише «пульс»: оновлюємо час у статусі
-        J.updated = nj.updated; threatsCard();
-        const st = $('status'), u = kyiv(new Date(J.updated));
-        if (st) { st.querySelector('span').innerHTML = `оновлено 0 хв тому<span class="st-date"> · ${u.slice(8, 10)}.${u.slice(5, 7)} ${u.slice(11, 16)}</span>`; st.className = 'status'; }
+        J.updated = nj.updated; pulse();
         return;
       }
       const prev = J; J = nj;
