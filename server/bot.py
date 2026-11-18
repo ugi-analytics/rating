@@ -243,6 +243,13 @@ button{margin-top:18px;width:100%;padding:12px;border:0;border-radius:8px;backgr
                 elif self.push and self.push.ok and method == "POST":
                     st, obj = self.push.api(path, body)
                     data, ct = json.dumps(obj).encode(), "application/json"
+                    if path.endswith("/subscribe") and obj.get("ok"):
+                        try:
+                            ep = json.loads(body)["sub"]["endpoint"]
+                            if not ep.startswith("https://example.invalid/"):
+                                asyncio.create_task(self.push.confirm(ep))
+                        except Exception:
+                            pass
                 else:
                     st, data, ct = "503 Service Unavailable", b"{}", "application/json"
                 writer.write((f"HTTP/1.1 {st}\r\nContent-Type: {ct}\r\nContent-Length: {len(data)}\r\n"
