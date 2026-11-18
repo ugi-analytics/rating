@@ -275,6 +275,13 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
 .cp-row.mine { font-weight: 600; }
 .cp-all { padding-left: 0; }
 .cp-find { width: 100%; box-sizing: border-box; margin: 2px 0 6px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-primary); font: 14px var(--f-body); }
+.city-btn { font: 600 13px var(--f-body); color: var(--text-primary); background: rgba(22,27,34,.85); border: 1px solid var(--border); border-radius: 8px; padding: 6px 28px 6px 10px; cursor: pointer; position: relative; min-width: 140px; text-align: left; }
+.city-btn::after { content: ''; position: absolute; right: 10px; top: 50%; width: 6px; height: 6px; border-right: 2px solid var(--text-secondary); border-bottom: 2px solid var(--text-secondary); transform: translateY(-70%) rotate(45deg); }
+.city-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.cp-pick { width: 100%; background: none; border: 0; color: var(--text-primary); text-align: left; font: 14px var(--f-body); }
+.cp-pick small { color: var(--text-muted); font-size: 12px; }
+.cp-pick .cp-n { margin-left: auto; color: var(--accent); font: 600 12px var(--f-mono); }
+.cp-more { color: var(--text-muted); font-size: 13px; padding: 8px 12px; margin: 0; }
 .ph-box button { flex: 1; font: 600 14px var(--f-body); border-radius: 10px; padding: 10px; cursor: pointer; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-primary); }
 .ph-box button.pri { background: var(--accent); border-color: var(--accent); color: #1a1109; }
 .mycard { margin: 14px 0 0; background: rgba(22,27,34,.7); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
@@ -317,7 +324,7 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
     <div class="seg" role="group" aria-label="Період">
       <button data-w="1">Доба</button><button data-w="7">7 днів</button><button data-w="30">30 днів</button><button data-w="all">Весь період</button>
     </div>
-    <label class="mycity">Моє місто <select id="lvCity"><option value="">— вибрати —</option></select></label>
+    <span class="mycity">Моє місто <button type="button" id="lvCityBtn" class="city-btn" aria-haspopup="dialog">— вибрати —</button></span>
   </div>
   <section class="mycard" id="myCard" hidden></section>
   <div class="permhelp" id="permHelp" hidden role="dialog" aria-modal="true" aria-labelledby="phTitle"><div class="ph-box" id="phBox"></div></div>
@@ -1016,6 +1023,7 @@ renderReport(DATA);
     $('cpFind').focus();
   }
 
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('permHelp').hidden) $('permHelp').hidden = true; });
   function permHelp(denied) {
     const ua = navigator.userAgent, ios = isIOS, android = /Android/i.test(ua), app = standalone();
     const steps = ios ? (app
@@ -1101,12 +1109,37 @@ renderReport(DATA);
       b.setAttribute('aria-pressed', b.dataset.w === win);
       b.onclick = () => { win = b.dataset.w; ls.set('rv_win', win); controls(); render(); };
     });
-    const sel = $('lvCity');
-    if (sel.length <= 1) {
-      Object.keys(J.cities).sort((a, b) => a.localeCompare(b, 'uk')).forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
-    }
-    sel.value = my;
-    sel.onchange = () => { my = sel.value; ls.set('rv_city', my); myCard(); threatsCard(); };
+    const btn = $('lvCityBtn');
+    btn.textContent = my || '— вибрати —';
+    btn.onclick = () => myCityPicker();
+  }
+
+  // вікно вибору «Мого міста» з пошуком
+  function myCityPicker() {
+    const all = Object.keys(J.cities);
+    const cnt = {}; J.events.forEach(e => cnt[e.c] = (cnt[e.c] || 0) + 1);
+    const base = all.slice().sort((a, b) => (cnt[b] || 0) - (cnt[a] || 0) || a.localeCompare(b, 'uk'));
+    $('phBox').innerHTML = `<h3 id="phTitle">Моє місто</h3>
+      <input type="search" id="mcFind" class="cp-find" placeholder="Почніть вводити назву, наприклад «Крем»" autocomplete="off" aria-label="Пошук міста">
+      <div class="cp-list" id="mcList" role="listbox"></div>
+      <div class="ph-btns"><button type="button" id="mcClose">Закрити</button>${my ? '<button type="button" id="mcClear">Не вибирати</button>' : ''}</div>`;
+    $('permHelp').hidden = false;
+    const pick = n => { my = n; ls.set('rv_city', my); $('permHelp').hidden = true; $('lvCityBtn').textContent = my || '— вибрати —'; myCard(); threatsCard(); };
+    const draw = q => {
+      q = q.trim().toLowerCase().replace(/[’ʼ]/g, "'");
+      let list = q ? base.filter(n => n.toLowerCase().includes(q)).sort((a, b) => (b.toLowerCase().startsWith(q) - a.toLowerCase().startsWith(q))) : base;
+      const more = list.length > 80 ? list.length - 80 : 0;
+      list = list.slice(0, 80);
+      $('mcList').innerHTML = list.length ? list.map(n => `<button type="button" class="cp-row cp-pick${n === my ? ' mine' : ''}" data-c="${esc(n)}" role="option">${esc(n)}${J.cities[n] && J.cities[n].r ? ` <small>${esc(J.cities[n].r)}</small>` : ''}${cnt[n] ? ` <small class="cp-n">${cnt[n]}</small>` : ''}</button>`).join('') +
+        (more ? `<p class="cp-more">…і ще ${more}. Уточніть назву.</p>` : '') : '<p class="cp-more">Такого міста не знайдено.</p>';
+      $('mcList').querySelectorAll('.cp-pick').forEach(b => b.onclick = () => pick(b.dataset.c));
+    };
+    draw('');
+    $('mcFind').oninput = e => draw(e.target.value);
+    $('mcFind').onkeydown = e => { if (e.key === 'Enter') { const f = $('mcList').querySelector('.cp-pick'); if (f) pick(f.dataset.c); } };
+    $('mcClose').onclick = () => { $('permHelp').hidden = true; };
+    if ($('mcClear')) $('mcClear').onclick = () => pick('');
+    setTimeout(() => $('mcFind').focus(), 30);
   }
 
   function render() {
