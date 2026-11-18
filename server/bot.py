@@ -166,8 +166,7 @@ class Notifier:
 
         @c.on(events.NewMessage(pattern=r"^/cities"))
         async def cities(ev):
-            await ev.respond("Міста, за якими можна стежити:\n" + ", ".join(self.cities) +
-                             "\n\n* — міста ближче до фронту: " + ", ".join(sorted(rc.BORDER_CITIES)))
+            await ev.respond("Міста, за якими можна стежити:\n" + ", ".join(self.cities))
 
         @c.on(events.NewMessage(pattern=r"^/all"))
         async def all_(ev):
@@ -214,7 +213,7 @@ class Notifier:
             if not self.client or e.get("type") == "threat":
                 continue
             t = e["t"]
-            border = " (ближче до фронту)" if e["c"] in rc.BORDER_CITIES else ""
+            border = ""
             cas = []
             if e.get("k"):
                 cas.append(f"загиблі: {e['k']}")
