@@ -185,6 +185,15 @@ async def resolve_and_join(client):
     """1) миттєво підключає всі канали з кешу; 2) у фоні шукає нові за назвою; 3) поступово підписується."""
     from telethon.tl.types import InputPeerChannel
     peers = _peers_load()
+    try:                                        # канали, знайдені пошуком, уже мають id — без звернення до Telegram
+        _dc = json.loads((DATA / "discover_state.json").read_text()).get("cands", {})
+        for ch in channels:
+            c = _dc.get(ch.lower())
+            if c and c.get("id") and not (peers.get(ch.lower()) or {}).get("id"):
+                peers[ch.lower()] = {"id": c["id"], "hash": c["hash"]}
+        _peers_save(peers)
+    except Exception as e:
+        log(f"discover_state: {e}")
     pending = []
     for ch in channels:                         # прохід 1: без звернень до Telegram
         rec = peers.get(ch.lower())
