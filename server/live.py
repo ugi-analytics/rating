@@ -182,43 +182,50 @@ def _peers_save(p):
 
 
 async def resolve_and_join(client):
-    """1) знаходить канали (з кешу або за назвою); 2) поступово підписується на нові."""
+    """1) миттєво підключає всі канали з кешу; 2) у фоні шукає нові за назвою; 3) поступово підписується."""
     from telethon.tl.types import InputPeerChannel
     peers = _peers_load()
-    to_join = []
-    for ch in channels:
+    pending = []
+    for ch in channels:                         # прохід 1: без звернень до Telegram
         rec = peers.get(ch.lower())
-        try:
-            if rec and rec.get("id"):
-                ip = InputPeerChannel(rec["id"], rec["hash"])
-            elif rec and time.time() - rec.get("miss", 0) < (86400 if ch.lower() in THREAT_ONLY else 3600):
-                failed.add(ch)                 # нещодавно не знайдено — не шукаємо повторно
-                ERRS[ch] = rec.get("err", "")
-                continue
-            else:
-                ip = await client.get_input_entity(ch)
-                if not hasattr(ip, "channel_id"):
-                    raise ValueError("це не канал, а особистий акаунт чи бот")
-                peers[ch.lower()] = {"id": ip.channel_id, "hash": ip.access_hash}
-                _peers_save(peers)
-                await asyncio.sleep(2)
+        if rec and rec.get("id"):
+            ip = InputPeerChannel(rec["id"], rec["hash"])
             ENT[ch] = ip
             peer2ch[utils.get_peer_id(ip)] = ch
             failed.discard(ch)
-            if not (rec and rec.get("joined")):
-                to_join.append(ch)
+        elif rec and time.time() - rec.get("miss", 0) < (86400 if ch.lower() in THREAT_ONLY else 3600):
+            failed.add(ch)
+            ERRS[ch] = rec.get("err", "")
+        else:
+            pending.append(ch)
+    RESOLVED.set()
+    log(f"Каналів підключено з кешу: {len(ENT)}/{len(channels)}, нових для пошуку: {len(pending)}")
+    for ch in pending:                          # прохід 2: нові канали — повільно, з паузами
+        try:
+            ip = await client.get_input_entity(ch)
+            if not hasattr(ip, "channel_id"):
+                raise ValueError("це не канал, а особистий акаунт чи бот")
+            peers[ch.lower()] = {"id": ip.channel_id, "hash": ip.access_hash}
+            _peers_save(peers)
+            ENT[ch] = ip
+            peer2ch[utils.get_peer_id(ip)] = ch
+            failed.discard(ch)
+            log(f"Знайдено канал: {ch}")
         except FloodWaitError as e:
-            log(f"! FloodWait {e.seconds} с під час пошуку каналів")
-            await asyncio.sleep(e.seconds + 5)
+            log(f"! FloodWait {e.seconds} с під час пошуку {ch} — спробую пізніше")
+            failed.add(ch)
+            ERRS[ch] = f"Telegram тимчасово обмежив пошук ({e.seconds} с)"
+            await asyncio.sleep(min(e.seconds, 3600) + 5)
+            continue
         except Exception as e:
             failed.add(ch)
             peers[ch.lower()] = {"miss": time.time(), "err": f"{type(e).__name__}: {e}"[:160]}
             ERRS[ch] = peers[ch.lower()]["err"]
             _peers_save(peers)
             log(f"! {ch}: {type(e).__name__}: {e}")
-    RESOLVED.set()
-    log(f"Каналів знайдено: {len(ENT)}/{len(channels)}, до перевірки підписки: {len(to_join)}")
-    for ch in to_join:
+        await asyncio.sleep(5)
+    # прохід 3: підписка на ті, де ще не учасник
+    for ch in [c for c in channels if c in ENT and not peers.get(c.lower(), {}).get("joined")]:
         try:
             ent = await client.get_entity(ENT[ch])
             if getattr(ent, "left", False):
@@ -231,11 +238,11 @@ async def resolve_and_join(client):
                 await asyncio.sleep(random.uniform(*JOIN_PAUSE))
             else:
                 await asyncio.sleep(1)
-            peers[ch.lower()]["joined"] = True
+            peers.setdefault(ch.lower(), {})["joined"] = True
             _peers_save(peers)
         except FloodWaitError as e:
             log(f"! FloodWait {e.seconds} с під час підписки")
-            await asyncio.sleep(e.seconds + 5)
+            await asyncio.sleep(min(e.seconds, 3600) + 5)
         except Exception as e:
             log(f"! підписка {ch}: {type(e).__name__}: {e}")
 
