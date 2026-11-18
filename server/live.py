@@ -70,7 +70,9 @@ def load():
     seed = load_json(DATA / "events.json", None) or load_json(WWW / "events.json", {})
     for e in seed.get("events", []):
         by_msg.setdefault((e["ch"], e["id"]), []).append(e)
-    THREATS.extend(seed.get("threats", []))
+    for d in seed.get("threats", []):    # перевіряємо збережені попередження новими правилами
+        if TH.detect(d.get("x", ""), d.get("ch", ""), city_res, None):
+            THREATS.append(d)
     for d in THREATS:
         THREAT_SEEN.add((d["ch"], d["id"]))
     log(f"Завантажено подій: {sum(len(v) for v in by_msg.values())}, загроз: {len(THREATS)}")

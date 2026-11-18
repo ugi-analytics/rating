@@ -17,7 +17,7 @@ KINDS = [   # (код, назва, значок, шаблон) — порядо�
     ("rkt", "ракети", "🚀", r"ракет|крилат|крылат|калібр|калибр|\bх-\d+"),
     ("fast", "швидкісна ціль", "⚡", r"швидкісн\w* ціл|скоростн\w* цел"),
     ("jet", "реактивний БпЛА", "✈️", r"реактивн\w* (?:бпла|безпілот|беспилот|шахед|дрон)"),
-    ("kab", "КАБи", "💣", r"\bкаб\w*\b|авіабомб|авиабомб|керован\w* (?:авіа)?бомб|управляем\w* (?:авиа)?бомб"),
+    ("kab", "КАБи", "💣", r"(?-i:\bКАБ(?:и|ів|ами|ам|ах|у|ом)?\b)|авіабомб|авиабомб|керован\w* (?:авіа)?бомб|управляем\w* (?:авиа)?бомб"),
     ("uav", "БпЛА", "🛵", r"бпла|безпілот|беспилот|шахед|дрон|мопед|герань|гербер|🛵|🏍"),
 ]
 KIND_RES = [(k, n, ic, re.compile(rx, re.I)) for k, n, ic, rx in KINDS]
@@ -98,7 +98,11 @@ def detect(text, ch, city_res, msg_time):
         if not line or CLEAR_RE.search(line):
             kind_ctx = None if line else kind_ctx
             continue
-        kind = next(((k, n, ic) for k, n, ic, rx in KIND_RES if rx.search(line)), None) or kind_ctx
+        own = next(((k, n, ic) for k, n, ic, rx in KIND_RES if rx.search(line)), None)
+        # тип із попереднього короткого рядка-заголовка («Шахеди:») переносимо лише на короткі рядки списку
+        kind = own or (kind_ctx if len(line) < 80 else None)
+        if not own and len(line) >= 80:
+            kind_ctx = None
         if not kind:
             continue
         cities = [c for c, rx in city_res.items() if rx.search(line)]
@@ -109,9 +113,13 @@ def detect(text, ch, city_res, msg_time):
             regs = [r for r in regs if r == ch_reg]
         short = len(line) < 60               # моніторингові «Полтава — шахед»
         if not (cities or regs):
-            kind_ctx = kind
+            kind_ctx = kind if len(line) < 120 else None
             continue
-        if not (MOVE_RE.search(line) or short or kind_ctx):
+        if len(line) > 400:                  # довгий абзац — це новина чи звіт, а не попередження
+            continue
+        if ch_reg and not (MOVE_RE.search(line) or re.search(r"атак|загроз|укритт", line, re.I)):   # ОВА — лише з напрямком руху чи закликом в укриття
+            continue
+        if not (MOVE_RE.search(line) or short or (kind_ctx and not own)):
             continue
         if AFTER_RE.search(line) and not MOVE_RE.search(line):
             continue
