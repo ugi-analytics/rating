@@ -281,6 +281,28 @@ async def catch_up(client):
         await asyncio.sleep(0.7)
 
 
+async def fast_poll_loop(client):
+    """Канали, на які ще не підписались, Telegram не надсилає миттєво — опитуємо їх щохвилини."""
+    await RESOLVED.wait()
+    while True:
+        t = time.time()
+        peers = _peers_load()
+        todo = [c for c in channels if c in ENT and not (peers.get(c.lower()) or {}).get("joined")]
+        for ch in todo:
+            last = state["last_id"].get(ch) or 0
+            try:
+                async for m in client.iter_messages(ENT[ch], limit=10, min_id=last):
+                    upsert(m, ch)
+                    state["last_id"][ch] = max(state["last_id"].get(ch) or 0, m.id)
+            except FloodWaitError as e:
+                log(f"! опитування {ch}: FloodWait {e.seconds} с")
+                await asyncio.sleep(min(e.seconds, 300))
+            except Exception as e:
+                log(f"! опитування {ch}: {type(e).__name__}: {e}")
+            await asyncio.sleep(0.5)
+        await asyncio.sleep(max(5, 60 - (time.time() - t)))
+
+
 async def catch_up_loop(client):
     await RESOLVED.wait()
     while True:
@@ -349,7 +371,7 @@ async def main():
     log(f"Старт. Каналів у списку: {len(channels)}")
     await client.catch_up()
     tasks = [asyncio.create_task(writer()), asyncio.create_task(resolve_and_join(client)),
-             asyncio.create_task(catch_up_loop(client))]
+             asyncio.create_task(catch_up_loop(client)), asyncio.create_task(fast_poll_loop(client))]
 
     async def _discover():
         await RESOLVED.wait()
