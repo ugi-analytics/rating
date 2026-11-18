@@ -132,6 +132,7 @@ def write():
         "channels": len(channels) - len(THREAT_ONLY),
         "threat_channels": len(THREAT_ONLY),
         "channels_failed": sorted(failed),
+        "channels_errors": {c: ERRS.get(c, "") for c in sorted(failed)},
         "keep_days": KEEP_DAYS,
         "cities": {n: {"lat": la, "lon": lo, "border": n in rc.BORDER_CITIES, "r": rc.CITY_REGION.get(n, "")} for n, (la, lo) in rc.COORDS.items()},
         "events": ev,
@@ -156,6 +157,7 @@ async def writer():
             last = time.time()
 
 
+ERRS = {}                      # канал -> причина, чому не знайдено
 ENT = {}                       # канал -> InputPeerChannel (кеш, щоб не шукати канали за назвою щоразу)
 RESOLVED = asyncio.Event()
 
@@ -183,8 +185,9 @@ async def resolve_and_join(client):
         try:
             if rec and rec.get("id"):
                 ip = InputPeerChannel(rec["id"], rec["hash"])
-            elif rec and time.time() - rec.get("miss", 0) < 86400:
-                failed.add(ch)                 # не знайдено менше доби тому — не шукаємо повторно
+            elif rec and time.time() - rec.get("miss", 0) < (86400 if ch.lower() in THREAT_ONLY else 3600):
+                failed.add(ch)                 # нещодавно не знайдено — не шукаємо повторно
+                ERRS[ch] = rec.get("err", "")
                 continue
             else:
                 ip = await client.get_input_entity(ch)
@@ -201,7 +204,8 @@ async def resolve_and_join(client):
             await asyncio.sleep(e.seconds + 5)
         except Exception as e:
             failed.add(ch)
-            peers[ch.lower()] = {"miss": time.time()}
+            peers[ch.lower()] = {"miss": time.time(), "err": f"{type(e).__name__}: {e}"[:160]}
+            ERRS[ch] = peers[ch.lower()]["err"]
             _peers_save(peers)
             log(f"! {ch}: {type(e).__name__}: {e}")
     RESOLVED.set()
