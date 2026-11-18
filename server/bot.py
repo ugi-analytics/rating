@@ -76,7 +76,7 @@ class Notifier:
                     self.log(f"Бота створено через BotFather: @{uname}")
                     try:   # опис і команди бота
                         for cmd in (f"/setdescription", f"@{uname}",
-                                    "Сповіщення про влучання й вибухи в тилових містах України з офіційних каналів ОВА та міських голів. Напишіть назву свого міста."):
+                                    "Сповіщення про влучання й вибухи в містах України з офіційних каналів ОВА та міських голів. Напишіть назву свого міста."):
                             await asyncio.sleep(1.5)
                             await conv.send_message(cmd)
                             await conv.get_response()
@@ -92,12 +92,12 @@ class Notifier:
 
     async def rebrand(self, user_client):
         """Одноразово оновлює назву й опис бота через @BotFather (від службового акаунта)."""
-        flag = self.data / "bot_brand_v2"
+        flag = self.data / "bot_brand_v3"
         if flag.exists() or not self.me:
             return
         u = "@" + self.me.username
         steps = [("/setname", u, "Небо над містом"),
-                 ("/setdescription", u, "Попередження про повітряні загрози та влучання в тилових містах України — з офіційних і моніторингових каналів. Напишіть назву свого міста."),
+                 ("/setdescription", u, "Попередження про повітряні загрози та влучання в містах України — з офіційних і моніторингових каналів. Напишіть назву свого міста."),
                  ("/setabouttext", u, "Небо над містом: що летить, куди влучило, як живе твоє місто. nebo-nad-mistom.pp.ua")]
         try:
             async with user_client.conversation("BotFather", timeout=40) as conv:
