@@ -25,6 +25,10 @@ MOVE_RE = re.compile(r"курс\w*|напрям|у бік|в бік|рухає|�
                      r"над |повз|прямує|на підльоті|підлітає|в сторону|кружля|маневр|направлени|летит|движ|подлет|в районе|➡|→|⬆|⬇|↗|↘|↙|↖", re.I)
 CLEAR_RE = re.compile(r"відбій|відбою|отбой|загроз\w* (?:минула|немає)|чисто\b", re.I)
 
+# офіційні/новинні канали без ОВА-прив'язки, де теж потрібен явний напрямок руху
+STRICT_CHANNELS = {"dsns_telegram", "generalstaffzsu", "mvs_ukraine", "ua_national_police", "ukrenergo",
+                   "centercounteringdisinformation", "air_alert_ua"}
+
 REGIONS = {
     "Київщина": r"Київщин|Київськ\w* обл",
     "Полтавщина": r"Полтавщин|Полтавськ\w* обл",
@@ -94,6 +98,8 @@ for _r, _rx in RU_REGIONS.items():
 AFTER_RE = re.compile(r"вибух|влучан|приліт|прильот|уламк|пожеж|постражд|загин|поранен|"
                       r"взрыв|прил[её]т|попадан|обломк|пожар|пострадав|погиб|ранен", re.I)
 
+CAPTION_RE = re.compile(r"^\W*(?:фото|відео|фото/відео|джерело|джерела|ілюстрац|скріншот|фото й відео|фото та відео|читайте|деталі|подробиці|фото|видео|источник)\b", re.I)
+
 _SPLIT = re.compile(r"\n+|(?<=[.!;])\s+")
 
 
@@ -104,11 +110,16 @@ def detect(text, ch, city_res, msg_time):
     if rc.classify(text, city_res):          # це повідомлення про влучання — не попередження
         return []
     ch_reg = rc.CHANNEL_REGION.get(ch.lower())
+    # 2) допис про наслідки (вибух, влучання, постраждалі) без жодного напрямку руху — не попередження
+    if AFTER_RE.search(text) and not MOVE_RE.search(text):
+        return []
+    # 3) ОВА й медіа («Суспільне» тощо) переважно звітують про наслідки — від них беремо лише рядки з напрямком
+    strict = bool(ch_reg) or "suspilne" in ch.lower() or ch.lower() in STRICT_CHANNELS
     out, seen = [], set()
     kind_ctx = None                          # тип, згаданий у попередньому рядку («Шахеди:\nПолтава\nКременчук»)
     for line in _SPLIT.split(text):
         line = line.strip()
-        if not line or CLEAR_RE.search(line):
+        if not line or CLEAR_RE.search(line) or CAPTION_RE.search(line):
             kind_ctx = None if line else kind_ctx
             continue
         own = next(((k, n, ic) for k, n, ic, rx in KIND_RES if rx.search(line)), None)
@@ -130,7 +141,7 @@ def detect(text, ch, city_res, msg_time):
             continue
         if len(line) > 400:                  # довгий абзац — це новина чи звіт, а не попередження
             continue
-        if ch_reg and not (MOVE_RE.search(line) or re.search(r"атак|загроз|укритт", line, re.I)):   # ОВА — лише з напрямком руху чи закликом в укриття
+        if strict and not (MOVE_RE.search(line) or re.search(r"атак|загроз|укритт", line, re.I)):   # ОВА — лише з напрямком руху чи закликом в укриття
             continue
         if not (MOVE_RE.search(line) or short or (kind_ctx and not own)):
             continue
