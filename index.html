@@ -267,6 +267,13 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
 .ph-box ol { margin: 0 0 14px; padding-left: 20px; font-size: 14px; line-height: 1.6; }
 .ph-box b { color: var(--text-primary); }
 .ph-box .ph-btns { display: flex; gap: 8px; }
+.cp-list { max-height: 46vh; overflow: auto; border: 1px solid var(--border); border-radius: 10px; padding: 4px 0; margin: 6px 0 14px; }
+.cp-row { display: flex; align-items: center; gap: 9px; padding: 7px 12px; font-size: 14px; cursor: pointer; }
+.cp-row:hover { background: var(--surface-2); }
+.cp-row input { accent-color: var(--accent); width: 16px; height: 16px; }
+.cp-row small { color: var(--text-muted); font-size: 12px; }
+.cp-row.mine { font-weight: 600; }
+.cp-all { padding-left: 0; }
 .ph-box button { flex: 1; font: 600 14px var(--f-body); border-radius: 10px; padding: 10px; cursor: pointer; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-primary); }
 .ph-box button.pri { background: var(--accent); border-color: var(--accent); color: #1a1109; }
 .mycard { margin: 14px 0 0; background: rgba(22,27,34,.7); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
@@ -950,23 +957,62 @@ renderReport(DATA);
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const standalone = () => matchMedia('(display-mode: standalone)').matches || navigator.standalone;
   const b64u8 = b => { const p = '='.repeat((4 - b.length % 4) % 4); const r = atob((b + p).replace(/-/g, '+').replace(/_/g, '/')); return Uint8Array.from(r, c => c.charCodeAt(0)); };
-  let pushCity = ls.get('rv_push', '');            // місто, на яке оформлено push ('*' — усі)
+  // міста, про які оформлено push: масив назв або ['*'] — усі міста
+  let pushList = (() => { try { const v = JSON.parse(ls.get('rv_push_list', 'null')); if (Array.isArray(v)) return v; } catch (e) {}
+    const old = ls.get('rv_push', ''); return old ? [old] : []; })();
+  let pushCity = pushList.length ? pushList[0] : '';     // для сумісності: «чи є підписка»
+  const savePush = list => { pushList = list; pushCity = list.length ? list[0] : ''; ls.set('rv_push_list', JSON.stringify(list)); ls.set('rv_push', pushCity); };
 
-  async function pushSubscribe(city) {
+  async function pushSubscribe(list) {
+    if (typeof list === 'string') list = [list];
     const reg = await navigator.serviceWorker.ready;
     let sub = await reg.pushManager.getSubscription();
     if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64u8(J.vapid) });
+    const all = list.includes('*');
     const r = await fetch(API + '/login/push/subscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sub: sub.toJSON(), cities: city === '*' ? [] : [city], all: city === '*' }) });
+      body: JSON.stringify({ sub: sub.toJSON(), cities: all ? [] : list, all }) });
     if (!r.ok) throw new Error('server ' + r.status);
-    pushCity = city; ls.set('rv_push', city);
+    savePush(all ? ['*'] : list);
   }
   async function pushOff() {
     try {
       const reg = await navigator.serviceWorker.ready, sub = await reg.pushManager.getSubscription();
       if (sub) { await fetch(API + '/login/push/unsubscribe', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ endpoint: sub.endpoint }) }).catch(() => {}); await sub.unsubscribe(); }
     } catch (e) {}
-    pushCity = ''; ls.set('rv_push', '');
+    savePush([]);
+  }
+
+  // вікно вибору міст для сповіщень
+  function cityPicker() {
+    const names = Object.keys(J.cities).sort((a, b) => a.localeCompare(b, 'uk'));
+    const chosen = new Set(pushList.length ? pushList : (my ? [my] : []));
+    const allOn = chosen.has('*');
+    const row = n => `<label class="cp-row${n === my ? ' mine' : ''}"><input type="checkbox" value="${esc(n)}"${chosen.has(n) || allOn ? ' checked' : ''}${allOn ? ' disabled' : ''}> ${esc(n)}${n === my ? ' <small>моє місто</small>' : ''}</label>`;
+    $('phBox').innerHTML = `<h3 id="phTitle">Про які міста сповіщати</h3>
+      <p>Позначте своє місто, сусідні або міста рідних. Попередження прийде, коли щось летить на місто чи його область, і коли там є влучання.</p>
+      <label class="cp-row cp-all"><input type="checkbox" id="cpAll"${allOn ? ' checked' : ''}> Усі міста <small>(багато сповіщень)</small></label>
+      <div class="cp-list">${(my ? [my] : []).concat(names.filter(n => n !== my && chosen.has(n)), names.filter(n => n !== my && !chosen.has(n))).map(row).join('')}</div>
+      <div class="ph-btns">${pushList.length ? '<button type="button" id="cpOff">Вимкнути всі</button>' : '<button type="button" id="cpOff">Скасувати</button>'}<button type="button" class="pri" id="cpSave">Зберегти</button></div>`;
+    $('permHelp').hidden = false;
+    const boxes = () => [...$('phBox').querySelectorAll('.cp-list input')];
+    $('cpAll').onchange = e => boxes().forEach(b => { b.disabled = e.target.checked; if (e.target.checked) b.checked = true; });
+    $('cpOff').onclick = async () => { $('permHelp').hidden = true; if (pushList.length) { await pushOff(); toast('Сповіщення вимкнено.'); myCard(); } };
+    $('cpSave').onclick = async () => {
+      const list = $('cpAll').checked ? ['*'] : boxes().filter(b => b.checked).map(b => b.value);
+      $('permHelp').hidden = true;
+      if (!list.length) { if (pushList.length) { await pushOff(); toast('Сповіщення вимкнено.'); } myCard(); return; }
+      try {
+        if (Notification.permission !== 'granted') {
+          const hint = setTimeout(() => permHelp(false), 4000);
+          let perm; try { perm = await Notification.requestPermission(); } finally { clearTimeout(hint); }
+          if (perm !== 'granted') throw new Error('perm');
+        }
+        await pushSubscribe(list);
+        toast(`<b>Сповіщення увімкнено</b><br>${list[0] === '*' ? 'Усі міста' : esc(list.join(', '))} — попереджатиму про загрози й влучання, навіть коли додаток закритий.`);
+      } catch (e) { if (e.message === 'perm') permHelp(Notification.permission === 'denied'); else toast('Не вдалося ввімкнути сповіщення (' + esc(e.message || e) + '). Спробуйте ще раз за хвилину.'); }
+      myCard();
+    };
+    $('cpSave').focus();
   }
 
   function permHelp(denied) {
@@ -1003,29 +1049,12 @@ renderReport(DATA);
         try { if (await Notification.requestPermission() === 'denied') permHelp(true); } catch (e) {} finally { clearTimeout(h); } myCard(); };
       return;
     }
-    const on = pushCity === my || pushCity === '*';
+    const n = pushList.length, label = !n ? '' : pushList[0] === '*' ? 'усі міста' : n === 1 ? pushList[0] : `${pushList[0]} і ще ${n - 1}`;
     nb.hidden = false;
     nb.disabled = false;
-    nb.textContent = perm === 'denied' ? 'Сповіщення заблоковано в браузері' : on ? '🔔 Сповіщення увімкнено' : '🔕 Попереджати про загрози й влучання';
-    nb.title = on ? 'Натисніть, щоб вимкнути' : 'Сповіщення прийдуть, навіть коли додаток закритий';
-    nb.onclick = async () => {
-      if (Notification.permission === 'denied') { permHelp(true); return; }
-      nb.disabled = true;
-      try {
-        if (on) { await pushOff(); toast('Сповіщення вимкнено.'); }
-        else {
-          nb.textContent = '⏳ Чекаю дозволу браузера…';
-          const hint = setTimeout(() => permHelp(false), 4000);
-          let perm;
-          try { perm = await Notification.requestPermission(); } finally { clearTimeout(hint); }
-          if (perm !== 'granted') throw new Error('perm');
-          nb.textContent = '⏳ Підключаю…';
-          await pushSubscribe(my);
-          toast(`<b>Сповіщення увімкнено</b><br>Попереджатиму, щойно щось летітиме на ${esc(my)} чи область або з'явиться допис про влучання — навіть коли додаток закритий.`);
-        }
-      } catch (e) { if (e.message === 'perm') permHelp(Notification.permission === 'denied'); else toast('Не вдалося ввімкнути сповіщення (' + esc(e.message || e) + '). Спробуйте ще раз за хвилину.'); }
-      myCard();
-    };
+    nb.textContent = perm === 'denied' ? 'Сповіщення заблоковано в браузері' : n ? `🔔 Сповіщення: ${label}` : '🔕 Попереджати про загрози й влучання';
+    nb.title = n ? 'Змінити міста для сповіщень' : 'Вибрати міста — сповіщення прийдуть, навіть коли додаток закритий';
+    nb.onclick = () => { if (Notification.permission === 'denied') { permHelp(true); return; } cityPicker(); };
   }
 
   // ---- «Загрози зараз»: попередження «що куди летить» за останню годину ----
@@ -1037,7 +1066,8 @@ renderReport(DATA);
     const fresh = J.threats.filter(d => now - Date.parse(d.t) < H);
     const latest = {}; fresh.forEach(d => { const w = d.c || d.r; if (!latest[w] || d.t > latest[w].t) latest[w] = d; });
     const rows = Object.values(latest).sort((a, b) => b.t.localeCompare(a.t)).slice(0, 14);
-    const mine = d => my && (d.c === my || (!d.c && d.r === myReg));
+    const watch = new Set([my, ...pushList].filter(Boolean)); const watchReg = new Set([...watch].map(c => J.cities[c] && J.cities[c].r).filter(Boolean));
+    const mine = d => watch.has(d.c) || (!d.c && watchReg.has(d.r));
     rows.sort((a, b) => (mine(b) - mine(a)) || b.t.localeCompare(a.t));
     const last = J.threats[0];
     box.innerHTML = `<div class="th-head">${rows.length ? '<span class="th-dot" aria-hidden="true"></span>' : ''}<h2>Загрози зараз</h2>
@@ -1075,7 +1105,7 @@ renderReport(DATA);
       Object.keys(J.cities).sort((a, b) => a.localeCompare(b, 'uk')).forEach(n => { const o = document.createElement('option'); o.value = n; o.textContent = n; sel.appendChild(o); });
     }
     sel.value = my;
-    sel.onchange = () => { my = sel.value; ls.set('rv_city', my); if (pushCity && pushCity !== '*') { (my ? pushSubscribe(my) : pushOff()).catch(() => {}).then(myCard); } myCard(); threatsCard(); };
+    sel.onchange = () => { my = sel.value; ls.set('rv_city', my); myCard(); threatsCard(); };
   }
 
   function render() {
