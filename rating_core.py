@@ -166,6 +166,7 @@ def compile_cities(include_border: bool):
     d = dict(CITIES)
     if include_border:
         d.update(BORDER_CITIES)
+    d.update(EXTRA_CITIES)              # усі інші міста України (cities_all.py)
     tail = r"(?![-\w]*\s+(?:район|област|ОВА|ОДА|МВА))"
     return {name: re.compile("(?:" + rx + ")" + tail) for name, rx in d.items()}
 
@@ -235,6 +236,8 @@ CHANNEL_REGION = {k.lower(): v for k, v in {
     "khmelnytskaODA": "Хмельниччина", "symchyshyn_oleksandr": "Хмельниччина",
     "cherkaskaODA": "Черкащина", "bondarenko_mayor": "Черкащина",
     "chernivetskaODA": "Буковина", "klichuk_roman": "Буковина",
+    "Sumy_news_ODA": "Сумщина", "chernigivskaODA": "Чернігівщина", "olexandrprokudin": "Херсонщина",
+    "VadymFilashkin": "Донеччина", "luhanskaVTSA": "Луганщина",
 }.items()}
 
 
@@ -347,6 +350,26 @@ COORDS = {
     "Дніпро": (48.46, 35.05), "Одеса": (46.48, 30.72), "Миколаїв": (46.98, 32.00),
     "Харків": (49.99, 36.23), "Запоріжжя": (47.84, 35.14), "Кривий Ріг": (47.91, 33.39),
 }
+
+# ------------------------------------------------------------ УСІ МІСТА УКРАЇНИ
+try:
+    import cities_all as _CA
+    _ALL = _CA.load()
+except Exception:                       # на комп'ютері без data_src — лише основний список
+    _CA, _ALL = None, []
+EXTRA_CITIES = {}
+CITY_POP = {}
+RU_NAMES = {}
+for _c in _ALL:
+    _n = _c["name"]
+    CITY_POP[_n] = _c["pop"]
+    if _c["ru"] and _c["ru"] != _n:
+        RU_NAMES[_n] = _c["ru"]
+    if _n not in CITIES and _n not in BORDER_CITIES:
+        EXTRA_CITIES[_n] = _CA.city_regex(_n)
+    CITY_REGION.setdefault(_n, _c["region"])
+    COORDS.setdefault(_n, (_c["lat"], _c["lon"]))
+AMBIGUOUS = set(_CA.AMBIGUOUS) if _CA else set()
 
 
 # ------------------------------------------------------------ АГРЕГАЦІЯ

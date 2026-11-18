@@ -49,6 +49,9 @@ REGIONS = {
     "Миколаївщина": r"Миколаївщин|Миколаївськ\w* обл",
     "Харківщина": r"Харківщин|Харківськ\w* обл",
     "Запоріжжя": r"Запорізьк\w* обл|Запоріжжі? області",
+    "Сумщина": r"Сумщин|Сумськ\w* обл", "Чернігівщина": r"Чернігівщин|Чернігівськ\w* обл",
+    "Херсонщина": r"Херсонщин|Херсонськ\w* обл", "Донеччина": r"Донеччин|Донецьк\w* обл",
+    "Луганщина": r"Луганщин|Луганськ\w* обл", "Крим": r"\bКрим\w*",
 }
 REGION_RES = {n: re.compile(rx, re.I) for n, rx in REGIONS.items()}
 # російськомовні назви міст (для моніторингових каналів, що пишуть російською)
@@ -68,6 +71,14 @@ RU_CITIES = {
     "Кривий Ріг": r"\bКрив(?:ой|ом|ого) Ро?г(?:е|а)?\b",
 }
 RU_CITY_RES = {c: re.compile(rx, 0 if c in ("Рівне", "Сміла", "Стрий", "Лубни", "Умань") else re.I) for c, rx in RU_CITIES.items()}
+# російські назви решти міст України (з Вікіданих)
+try:
+    import cities_all as _CA
+    for _n, _ru in rc.RU_NAMES.items():
+        if _n not in RU_CITY_RES and _n not in rc.AMBIGUOUS and len(_ru) >= 5:
+            RU_CITY_RES[_n] = re.compile(_CA.ru_regex(_ru))
+except Exception:
+    pass
 # назви, що збігаються зі звичайними словами, лишаються чутливими до регістру
 _CASE_SENSITIVE = {"Рівне", "Сміла", "Стрий", "Лубни", "Умань"}
 
@@ -76,7 +87,8 @@ def _ci(city_res):
     """Копія шаблонів міст без урахування регістру (крім неоднозначних назв)."""
     key = id(city_res)
     if key not in _CI_CACHE:
-        _CI_CACHE[key] = {c: (rx if c in _CASE_SENSITIVE else re.compile(rx.pattern, re.I)) for c, rx in city_res.items()}
+        base = set(rc.CITIES) | set(rc.BORDER_CITIES)      # без регістру — лише основні міста; решта — з великої літери
+        _CI_CACHE[key] = {c: (re.compile(rx.pattern, re.I) if c in base and c not in _CASE_SENSITIVE else rx) for c, rx in city_res.items()}
     return _CI_CACHE[key]
 
 
@@ -131,6 +143,8 @@ def detect(text, ch, city_res, msg_time):
             continue
         cities = [c for c, rx in _ci(city_res).items() if rx.search(line)]
         cities += [c for c, rx in RU_CITY_RES.items() if c not in cities and rx.search(line)]
+        # однойменні зі звичайними словами («Щастя», «Долина», «Південне») — лише з каналів своєї області
+        cities = [c for c in cities if c not in rc.AMBIGUOUS or (ch_reg and rc.CITY_REGION.get(c) == ch_reg)]
         regs = [r for r, rx in REGION_RES.items() if rx.search(line)]
         if ch_reg:                           # канал ОВА — лише своя область
             cities = [c for c in cities if rc.CITY_REGION.get(c) == ch_reg]

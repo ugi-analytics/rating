@@ -48,3 +48,10 @@ ivan_fedorov_zp
 vilkul
 
 # Не включено: Донецька, Луганська, Сумська, Херсонська, Чернігівська ОВА; Чернігів.
+
+# --- ОВА областей, доданих із повним переліком міст України (18.11.2026) ---
+Sumy_news_ODA
+chernigivskaODA
+olexandrprokudin
+VadymFilashkin
+luhanskaVTSA

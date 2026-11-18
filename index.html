@@ -274,6 +274,7 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
 .cp-row small { color: var(--text-muted); font-size: 12px; }
 .cp-row.mine { font-weight: 600; }
 .cp-all { padding-left: 0; }
+.cp-find { width: 100%; box-sizing: border-box; margin: 2px 0 6px; padding: 9px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-primary); font: 14px var(--f-body); }
 .ph-box button { flex: 1; font: 600 14px var(--f-body); border-radius: 10px; padding: 10px; cursor: pointer; border: 1px solid var(--border); background: var(--surface-2); color: var(--text-primary); }
 .ph-box button.pri { background: var(--accent); border-color: var(--accent); color: #1a1109; }
 .mycard { margin: 14px 0 0; background: rgba(22,27,34,.7); -webkit-backdrop-filter: blur(5px); backdrop-filter: blur(5px);
@@ -987,11 +988,14 @@ renderReport(DATA);
     const row = n => `<label class="cp-row${n === my ? ' mine' : ''}"><input type="checkbox" value="${esc(n)}"${chosen.has(n) || allOn ? ' checked' : ''}${allOn ? ' disabled' : ''}> ${esc(n)}${n === my ? ' <small>моє місто</small>' : ''}</label>`;
     $('phBox').innerHTML = `<h3 id="phTitle">Про які міста сповіщати</h3>
       <p>Позначте своє місто, сусідні або міста рідних. Попередження прийде, коли щось летить на місто чи його область, і коли там є влучання.</p>
-      <label class="cp-row cp-all"><input type="checkbox" id="cpAll"${allOn ? ' checked' : ''}> Усі міста <small>(багато сповіщень)</small></label>
+      <input type="search" id="cpFind" class="cp-find" placeholder="Знайти місто…" autocomplete="off">
+      <label class="cp-row cp-all"><input type="checkbox" id="cpAll"${allOn ? ' checked' : ''}> Усі міста <small>(дуже багато сповіщень)</small></label>
       <div class="cp-list">${(my ? [my] : []).concat(names.filter(n => n !== my && chosen.has(n)), names.filter(n => n !== my && !chosen.has(n))).map(row).join('')}</div>
       <div class="ph-btns">${pushList.length ? '<button type="button" id="cpOff">Вимкнути всі</button>' : '<button type="button" id="cpOff">Скасувати</button>'}<button type="button" class="pri" id="cpSave">Зберегти</button></div>`;
     $('permHelp').hidden = false;
     const boxes = () => [...$('phBox').querySelectorAll('.cp-list input')];
+    $('cpFind').oninput = e => { const q = e.target.value.trim().toLowerCase();
+      $('phBox').querySelectorAll('.cp-list .cp-row').forEach(r => { const v = r.querySelector('input').value.toLowerCase(); r.style.display = !q || v.includes(q) || r.querySelector('input').checked ? '' : 'none'; }); };
     $('cpAll').onchange = e => boxes().forEach(b => { b.disabled = e.target.checked; if (e.target.checked) b.checked = true; });
     $('cpOff').onclick = async () => { $('permHelp').hidden = true; if (pushList.length) { await pushOff(); toast('Сповіщення вимкнено.'); myCard(); } };
     $('cpSave').onclick = async () => {
@@ -1009,7 +1013,7 @@ renderReport(DATA);
       } catch (e) { if (e.message === 'perm') permHelp(Notification.permission === 'denied'); else toast('Не вдалося ввімкнути сповіщення (' + esc(e.message || e) + '). Спробуйте ще раз за хвилину.'); }
       myCard();
     };
-    $('cpSave').focus();
+    $('cpFind').focus();
   }
 
   function permHelp(denied) {

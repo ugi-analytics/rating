@@ -166,7 +166,8 @@ class Notifier:
 
         @c.on(events.NewMessage(pattern=r"^/cities"))
         async def cities(ev):
-            await ev.respond("Міста, за якими можна стежити:\n" + ", ".join(self.cities))
+            await ev.respond(f"Я стежу за всіма {len(self.cities)} містами України. Просто напишіть назву свого міста "
+                             "(можна перші літери, наприклад «Кремен»), і я додам його до сповіщень.")
 
         @c.on(events.NewMessage(pattern=r"^/all"))
         async def all_(ev):
