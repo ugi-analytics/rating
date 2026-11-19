@@ -153,6 +153,22 @@ FORECAST_RE = re.compile(r"прогноз|можуть\s+(?:запуск|ата�
 REPORT_RE = re.compile(r"\bзбит[оіи]|\bзбили\b|подавлен|знищен|ліквідован|\bатакува(?:в|ла|ли)\b|запусти(?:в|ла|ли)\b|випусти(?:в|ла|ли)\b|"
                        r"\bсбит|уничтож|атаковал|запустил", re.I)
 
+_ORIGIN_PRE = re.compile(r"(?:^|[\s(])(?:з|із|зі|с|со)\s+(?:[\w'-]+\s+)?$", re.I)
+_PREFIX_PRE = re.compile(r"(?:^|\s)(?:нов\w*|велик\w*|мал\w*|стар\w*|верхн\w*|нижн\w*|кримськ\w*)\s+$", re.I)
+
+
+def _roles(rx, line):
+    """Як згадано місце: 'target' — ціль, 'origin' — звідки летить («з Криму»), None — частина іншої назви («Нова Одеса»)."""
+    roles, found = set(), False
+    for m in rx.finditer(line):
+        found = True
+        pre = line[max(0, m.start() - 40):m.start()]
+        if _PREFIX_PRE.search(pre):
+            continue
+        roles.add("origin" if _ORIGIN_PRE.search(pre) else "target")
+    return roles if found else None
+
+
 _SPLIT = re.compile(r"\n+|(?<=[.!;])\s+")
 
 
@@ -226,6 +242,22 @@ def detect(text, ch, city_res, msg_time):
             continue
         if FORECAST_RE.search(line) or (REPORT_RE.search(line) and not re.search(r"курс|напрям|летить|летять|прямує|→|➡", line, re.I)):
             continue
+        # «Нова Одеса» — не Одеса; «з Криму», «з Харківщини» — звідки летить, а не куди
+        _cr = {c: _roles(_ci(city_res).get(c) or RU_CITY_RES.get(c) or re.compile(re.escape(c)), line) for c in cities}
+        _cr = {c: ({"target"} if r is None else r) for c, r in _cr.items()}     # місто з «… громада»
+        _rr = {r: (_roles(REGION_RES[r], line) or set()) for r in regs}
+        if re.search(r"кримськ\w*\s+м[іо]ст", line, re.I):
+            _rr.pop("Крим", None)
+            regs = [r for r in regs if r != "Крим"]
+        tc = [c for c in cities if "target" in _cr[c]]
+        tr = [r for r in regs if "target" in _rr[r]]
+        if tc or tr:
+            cities, regs = tc, tr
+        else:
+            if kind[0] != "bal":            # лише «звідки», без цілі — не попередження (крім балістики «з Криму»)
+                continue
+            cities = [c for c in cities if _cr[c]]
+            regs = [r for r in regs if _rr[r]]
         for c in cities:
             key = ("c", c)
             if key not in seen:
