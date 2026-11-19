@@ -209,22 +209,54 @@ async def resolve_and_join(client):
             pending.append(ch)
     RESOLVED.set()
     log(f"Каналів підключено з кешу: {len(ENT)}/{len(channels)}, нових для пошуку: {len(pending)}")
-    for ch in pending:                          # прохід 2: нові канали — повільно, з паузами
+    # прохід 2: нові канали. Спершу без пошуку за назвою (у Telegram на нього жорсткий ліміт):
+    #   а) серед діалогів акаунта; б) через загальний пошук каналів; в) лише тоді — за назвою
+    from telethon.tl.functions.contacts import SearchRequest
+    if pending:
         try:
-            ip = await client.get_input_entity(ch)
-            if not hasattr(ip, "channel_id"):
-                raise ValueError("це не канал, а особистий акаунт чи бот")
-            peers[ch.lower()] = {"id": ip.channel_id, "hash": ip.access_hash}
+            async for d in client.iter_dialogs():
+                u = (getattr(d.entity, "username", None) or "").lower()
+                if u and hasattr(d.entity, "access_hash") and (getattr(d.entity, "broadcast", False) or getattr(d.entity, "megagroup", False)):
+                    if u in {c.lower() for c in pending} and not (peers.get(u) or {}).get("id"):
+                        peers[u] = {"id": d.entity.id, "hash": d.entity.access_hash}
+            _peers_save(peers)
+        except Exception as e:
+            log(f"діалоги: {type(e).__name__}: {e}")
+    flood_until = max([v.get("flood_until", 0) for v in peers.values() if isinstance(v, dict)] + [0])
+    for ch in pending:
+        rec = peers.get(ch.lower()) or {}
+        try:
+            if not rec.get("id"):
+                res = await client(SearchRequest(q=ch, limit=10))
+                for c in res.chats:
+                    if (getattr(c, "username", None) or "").lower() == ch.lower() and getattr(c, "access_hash", None):
+                        rec = peers[ch.lower()] = {"id": c.id, "hash": c.access_hash}
+                        break
+                await asyncio.sleep(3)
+            if rec.get("id"):
+                ip = InputPeerChannel(rec["id"], rec["hash"])
+            elif time.time() < flood_until:
+                failed.add(ch)
+                ERRS[ch] = f"Telegram тимчасово обмежив пошук (ще {int(flood_until - time.time())} с)"
+                continue
+            else:
+                ip = await client.get_input_entity(ch)
+                if not hasattr(ip, "channel_id"):
+                    raise ValueError("це не канал, а особистий акаунт чи бот")
+                rec = peers[ch.lower()] = {"id": ip.channel_id, "hash": ip.access_hash}
             _peers_save(peers)
             ENT[ch] = ip
             peer2ch[utils.get_peer_id(ip)] = ch
             failed.discard(ch)
+            ERRS.pop(ch, None)
             log(f"Знайдено канал: {ch}")
         except FloodWaitError as e:
-            log(f"! FloodWait {e.seconds} с під час пошуку {ch} — спробую пізніше")
+            log(f"! FloodWait {e.seconds} с під час пошуку {ch}")
             failed.add(ch)
             ERRS[ch] = f"Telegram тимчасово обмежив пошук ({e.seconds} с)"
-            await asyncio.sleep(min(e.seconds, 3600) + 5)
+            flood_until = time.time() + e.seconds + 60
+            peers.setdefault("_flood", {})["flood_until"] = flood_until
+            _peers_save(peers)
             continue
         except Exception as e:
             failed.add(ch)
