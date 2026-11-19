@@ -81,8 +81,11 @@ class Stats:
         ay = set(self.d["days"].get(y, {}).get("u", []))
         inst = sum(1 for u in U.values() if u.get("inst"))
         rows = []
+        first = min(self.d["days"] or [_today()])
         for i in range(30):
             k = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+            if k < first:
+                break
             dd = self.d["days"].get(k, {"u": [], "opens": 0})
             new = sum(1 for u in U.values() if u.get("first") == k)
             rows.append((k, len(dd["u"]), new, dd["opens"]))
