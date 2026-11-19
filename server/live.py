@@ -379,6 +379,11 @@ async def main():
     notifier = Notifier(DATA, int(env["TG_API_ID"]), env["TG_API_HASH"], log)
     notify_q = notifier.q
     try:
+        from stats import Stats
+        notifier.stats = Stats(DATA)
+    except Exception as e:
+        log(f"! Статистика не запустилась: {type(e).__name__}: {e}")
+    try:
         from push import Push
         notifier.push = await asyncio.to_thread(Push, DATA, log)
         BOT["vapid"] = notifier.push.public

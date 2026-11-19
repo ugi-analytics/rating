@@ -8,6 +8,7 @@ Telegram-бот сповіщень «Рейтинг влучань».
   (підтвердження — api_hash службового акаунта), зберігається у /var/lib/rating/bot_token.
 """
 import asyncio
+import hashlib
 import html
 import json
 import os
@@ -20,6 +21,7 @@ from telethon.sessions import StringSession
 import rating_core as rc
 
 APP_URL = "https://nebo-nad-mistom.pp.ua/"
+STATS_KEY_SHA = "66579005db5f80730653153540a715d4048f2195f9892555cd535c0f1744154e"   # sha256 ключа до сторінки статистики
 
 
 class Notifier:
@@ -38,6 +40,7 @@ class Notifier:
             self.subs = {}
         self.cities = sorted(rc.COORDS)
         self.push = None
+        self.stats = None
         self._sender_task = None
 
     # ---------- збереження ----------
@@ -276,6 +279,26 @@ button{margin-top:18px;width:100%;padding:12px;border:0;border-radius:8px;backgr
                 writer.write((f"HTTP/1.1 {st}\r\nContent-Type: {ct}\r\nContent-Length: {len(data)}\r\n"
                               "Access-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n"
                               "Access-Control-Max-Age: 86400\r\nConnection: close\r\n\r\n").encode() + data)
+                await writer.drain()
+                return
+            if path == "/login/hit":
+                ok = self.stats.hit(body) if (self.stats and method == "POST") else False
+                data = b'{"ok":true}' if ok else b'{"ok":false}'
+                writer.write((f"HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {len(data)}\r\n"
+                              "Connection: close\r\n\r\n").encode() + data)
+                await writer.drain()
+                return
+            if path == "/login/stats":
+                k = (parse_qs(urlparse(target).query).get("k") or [""])[0]
+                if self.stats and hashlib.sha256(k.encode()).hexdigest() == STATS_KEY_SHA:
+                    self.stats.maybe_save(force=True)
+                    out = self.stats.page(self.push.subs if self.push and self.push.ok else None,
+                                          len(self.subs) if self.client else None)
+                else:
+                    status, out = "403 Forbidden", "<meta charset=utf-8><p>Потрібне посилання з ключем.</p>"
+                data = out.encode()
+                writer.write((f"HTTP/1.1 {status}\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {len(data)}\r\n"
+                              "Cache-Control: no-store\r\nX-Robots-Tag: noindex\r\nConnection: close\r\n\r\n").encode() + data)
                 await writer.drain()
                 return
             if path != "/login/bot":

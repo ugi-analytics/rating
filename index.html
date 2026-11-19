@@ -865,6 +865,26 @@ renderReport(DATA);
   let J = null, win = ls.get('rv_win', '30'), border = true, my = ls.get('rv_city', '');
   { const qc = new URLSearchParams(location.search).get('city'); if (qc) { my = qc; ls.set('rv_city', qc); } }
 
+  // анонімна статистика відвідувань: лише випадковий номер пристрою, без особистих даних
+  function hit() {
+    try {
+      if (location.protocol === 'file:') return;
+      const last = +ls.get('rv_hit', '0');
+      if (Date.now() - last < 30 * 60000) return;
+      ls.set('rv_hit', String(Date.now()));
+      let id = ls.get('rv_uid', '');
+      if (!id) { id = (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)); ls.set('rv_uid', id); }
+      const ua = navigator.userAgent;
+      const pl = /android/i.test(ua) ? 'android' : /iphone|ipad|ipod/i.test(ua) || (/macintosh/i.test(ua) && navigator.maxTouchPoints > 1) ? 'ios' : /windows/i.test(ua) ? 'win' : /macintosh/i.test(ua) ? 'mac' : /linux/i.test(ua) ? 'linux' : '?';
+      const inst = (window.matchMedia && matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+      const push = 'Notification' in window && Notification.permission === 'granted' && (() => { try { return (JSON.parse(ls.get('rv_push_list', '[]')) || []).length > 0; } catch (e) { return false; } })();
+      fetch(SRCS[0].replace('/events.json', '/login/hit'), { method: 'POST', keepalive: true, mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify({ id, pl, inst: inst ? 1 : 0, city: ls.get('rv_city', ''), push: push ? 1 : 0 }) }).catch(() => {});
+    } catch (e) {}
+  }
+  hit();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') hit(); });
+
   function build() {
     const now = Date.now();
     const days = win === 'all' ? null : +win;
