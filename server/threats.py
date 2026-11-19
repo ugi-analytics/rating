@@ -140,7 +140,7 @@ def _hromada(line):
 
 
 # підпис каналу внизу допису («🔄 Моніторинг Полтава | Підписатись», «Радар Вінниця | Тривога | Ракети»)
-FOOTER_RE = re.compile(r"підпис|подпис|subscribe|\|.*\||@\w{4,}|^\W*(?:ппо|радар|моніторинг|тривога|повітряна тривога|інформатор)\b.{0,30}$|"
+FOOTER_RE = re.compile(r"підпис|подпис|subscribe|\bтут\b\W*$|без цензури|t\.me/|👉|👇|⮕|\|.*\||@\w{4,}|^\W*(?:ппо|радар|моніторинг|тривога|повітряна тривога|інформатор)\b.{0,30}$|"
                        r"(?:радар|моніторинг|monitoring|онлайн|alerts|тривога)\W*$", re.I)
 
 # прогнози й аналітика («можуть запускати», «під загрозою в ніч на 20 листопада») — не поточний рух цілі
@@ -177,6 +177,8 @@ def detect(text, ch, city_res, msg_time):
     reg_ctx = None                           # область із рядка-заголовка («Черкащина:»)
     for line in _SPLIT.split(text):
         line = line.strip()
+        if line and re.search(r"підпис|подпис|subscribe", line, re.I):
+            break                            # далі — лише підпис каналу й реклама
         if line and FOOTER_RE.search(line) and not re.search(r"курс|напрям|летить|летять|прямує|повз|➡|→", line, re.I):
             continue
         if not line or CLEAR_RE.search(line) or CAPTION_RE.search(line):
