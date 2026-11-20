@@ -396,7 +396,7 @@ function drawMap(id, list, compact) {
   });
   m.addLayer(cl);
   mapObj = m;
-  setTimeout(() => m.invalidateSize(), 50);
+  setTimeout(() => { m.invalidateSize(); m.fitBounds([[44.4, 22.2], [52.3, 40.2]]); }, 60);
 }
 
 // ---------- сторінки ----------
