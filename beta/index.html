@@ -35,7 +35,7 @@ button{font:inherit;color:inherit}
 .side .foot{margin-top:auto;font-size:12px;color:var(--muted);padding:8px}
 /* верхня панель */
 .main{min-width:0}
-.top{position:sticky;top:0;z-index:500;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 24px;background:rgba(18,22,28,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.top{position:sticky;top:0;z-index:1100;display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 24px;background:rgba(18,22,28,.92);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
 .top h1{font-size:20px;margin:0;margin-right:auto}
 .fresh{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--soft)}
 .dot{width:9px;height:9px;border-radius:50%;background:var(--muted)}
@@ -143,7 +143,7 @@ body.an .analytics-only{display:revert}
   .content{padding:14px 14px 90px}
   .kpi .val{font-size:26px}
   #map{height:320px}
-  .bnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:1000;background:#0f141b;border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
+  .bnav{display:flex;position:fixed;left:0;right:0;bottom:0;z-index:1100;background:#0f141b;border-top:1px solid var(--line);padding:6px 4px calc(6px + env(safe-area-inset-bottom))}
   .bnav a{flex:1;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;font-weight:700;color:var(--muted);text-decoration:none;padding:4px 0}
   .bnav a svg{width:22px;height:22px}
   .bnav a.on{color:var(--blue)}
@@ -373,7 +373,7 @@ let mapObj = null;
 function drawMap(id, list, compact) {
   if (mapObj) { mapObj.remove(); mapObj = null; }
   const el = $(id); if (!el || !window.L) { if (el) el.innerHTML = '<div class="state">Карта не завантажилась (немає доступу до бібліотеки карт).</div>'; return; }
-  const m = L.map(el, { zoomControl: true, attributionControl: true, preferCanvas: true }).setView([48.6, 31.2], compact ? 5 : 6);
+  const m = L.map(el, { zoomControl: true, attributionControl: true, preferCanvas: true }).fitBounds([[44.4, 22.2], [52.3, 40.2]]);
   const esri = s => `https://server.arcgisonline.com/ArcGIS/rest/services/${s}/MapServer/tile/{z}/{y}/{x}`;
   L.tileLayer(esri('Canvas/World_Dark_Gray_Base'), { maxZoom: 12, attribution: '&copy; Esri' }).addTo(m);
   L.tileLayer(esri('Canvas/World_Dark_Gray_Reference'), { maxZoom: 12 }).addTo(m);
@@ -433,7 +433,7 @@ function pageHome() {
         <div class="legend"><span><i></i>місто, число — кількість подій</span><span><i class="big" style="background:var(--blue)"></i>група міст поруч</span></div></section>
       <section class="card"><h2>Рейтинг міст</h2><p class="sub">За кількістю подій за ${range()[2]}</p>
         ${rank.length ? `<div class="scroll"><table><tr><th>Місто</th><th class="n">Подій</th><th class="n">Загиблі</th><th class="n">Поранені</th><th class="n">Зміна</th></tr>
-        ${rank.map(r => { const c = change(r.n, r.p); return `<tr class="click" data-c="${esc(r.c)}"><td><b>${esc(r.c)}</b></td><td class="n">${r.n}</td><td class="n">${r.k || '—'}</td><td class="n">${r.i || '—'}</td><td class="n ${c.cls}" title="${esc(c.txt)}">${hasPrev ? (r.p ? (r.n - r.p > 0 ? '+' : '') + (r.n - r.p) : 'нове') : '—'}</td></tr>`; }).join('')}</table></div>` : '<div class="state">Подій за вибраний період немає.</div>'}
+        ${rank.map(r => { const c = change(r.n, r.p); return `<tr class="click" data-c="${esc(r.c)}"><td><b>${esc(r.c)}</b></td><td class="n">${r.n}</td><td class="n">${r.k || '—'}</td><td class="n">${r.i || '—'}</td><td class="n ${hasPrev ? c.cls : 'flat'}" title="${hasPrev ? esc(c.txt) : ''}">${hasPrev ? (r.p ? (r.n - r.p > 0 ? '+' : '') + (r.n - r.p) : 'нове') : '—'}</td></tr>`; }).join('')}</table></div>` : '<div class="state">Подій за вибраний період немає.</div>'}
       </section>
     </div>
     <section class="card" style="margin-top:16px"><div class="cardhead"><div><h2>Динаміка подій</h2><p class="sub">Кількість подій (місто × доба) за ${range()[2]}</p></div>
