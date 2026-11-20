@@ -179,10 +179,32 @@ EXCLUDE_RE = re.compile(
     r"на щиті|вічная пам|світла пам", re.I)
 
 
+# Факт наслідків (сильні ознаки) і «вибух» окремо — він часто вживається загально («здригатися від вибухів»)
+FACT_RE = re.compile(r"влучан|влучил|влучив|влучання|поцілив|приліт|прильот|уламк|пошкоджен|понівеч|зруйнов|руйнуван|"
+                     r"пожеж|займан|загорі|загин|загибл|поранен|травмован|постраждал|вибит\w* вікн|вибуховою хвилею|"
+                     r"зазнал\w* (?:удар|атак|обстріл)|удар\w* зазнал|під (?:ворожим )?ударом", re.I)
+BOOM_RE = re.compile(r"вибух", re.I)
+# Тематичні дописи посадовців без факту удару: звіти, гроші, привітання, дайджести, спорт, культура
+TOPIC_RE = re.compile(r"млн\.? ?грн|млрд|тис\.? ?грн|\bзвіт\w* (?:з|про) допомог|закуплено|передано (?:для|військов)|"
+                      r"\bвітаю|з днем\b|дайджест|футбол|футзал|чемпіон|концерт|виставк|фестивал|меморандум|"
+                      r"вакансі|тренінг|конкурс|грант|стипенді|субвенці|бюджет\w* (?:міста|громади)", re.I)
+_SENT = re.compile(r"(?<=[.!?…])\s+|\n+")
+
+
+def _windows(text):
+    """Речення (рядки) тексту і вікна «речення + сусіднє», щоб місто й факт були поруч, а не будь-де в довгому дописі."""
+    parts = [p.strip() for p in _SENT.split(text) if p and p.strip()]
+    if len(parts) <= 1:
+        return [text]
+    return [" ".join(parts[max(0, i - 2):i + 3]) for i in range(len(parts))]
+
+
 def classify(text: str, city_res: dict) -> list:
     """Повертає список міст, де повідомлення фіксує влучання/вибух."""
     if not text:
         return []
+    # «КРИВИЙ РІГ. НА РАНОК…» — назви великими літерами теж мають знаходитись
+    text = re.sub(r"\b[А-ЯІЇЄҐ][А-ЯІЇЄҐ'ʼ’-]{2,}\b", lambda m: m.group(0).capitalize(), text)
     t = text.lower()
     if not HIT_RE.search(t) or not ATTACK_RE.search(t):
         return []
@@ -191,7 +213,35 @@ def classify(text: str, city_res: dict) -> list:
     # повідомлення лише про рух цілей без факту наслідків — відкидаємо
     if NOISE_RE.search(t) and not re.search(r"влучан|пошкоджен|загин|поранен|уламк", t):
         return []
-    return [name for name, rx in city_res.items() if rx.search(text)]
+    cand = [name for name, rx in city_res.items() if rx.search(text)]
+    if not cand:
+        return []
+    topical = bool(TOPIC_RE.search(t))
+    wins = _windows(text)
+    out = []
+    head = " ".join(_windows(text)[:1]) if len(wins) > 1 else text      # перші речення — про що допис
+    fact_any = bool(FACT_RE.search(t))
+    for name in cand:
+        rx = city_res[name]
+        # допис саме про це місто (воно в заголовку/перших реченнях) і в ньому є факт наслідків
+        ok = bool(rx.search(head) and fact_any and not topical and len(text) < 1500)
+        for w in ([] if ok else wins):
+            if not rx.search(w):
+                continue
+            wl = w.lower()
+            if FACT_RE.search(wl):
+                ok = True
+                break
+            # лише «вибух(и)» без іншого факту: рахуємо, якщо допис короткий і не тематичний («У Кременчуці пролунали вибухи»)
+            if BOOM_RE.search(wl) and not topical and len(text) < 700:
+                ok = True
+                break
+        if ok:
+            out.append(name)
+    # тематичний допис (звіт, гроші, свято…) зараховуємо лише з прямим фактом про влучання/постраждалих
+    if topical and not re.search(r"влучан|влучил|влучив|приліт|прильот|поранен|загинул|загинув|постраждал|травмован|уламк", t):
+        return []
+    return out
 
 
 # ------------------------------------------------------------ ОБЛАСТІ

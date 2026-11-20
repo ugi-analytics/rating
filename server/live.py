@@ -17,6 +17,7 @@ import html
 import json
 import os
 import random
+import re
 import sys
 import time
 from datetime import datetime, timedelta
@@ -344,6 +345,32 @@ async def fast_poll_loop(client):
         await asyncio.sleep(max(5, 60 - (time.time() - t)))
 
 
+def _keep(text, city):
+    """Чи залишається влучання в місті за поточною методикою (перевіряємо лише там, де місто видно в збереженому тексті)."""
+    rx = city_res.get(city)
+    if not rx or not rx.search(re.sub(r"\b[А-ЯІЇЄҐ][А-ЯІЇЄҐ'ʼ’-]{2,}\b", lambda m: m.group(0).capitalize(), text)):
+        return True
+    return city in rc.classify(text, city_res)
+
+
+def _recheck_archive():
+    import hashlib
+    import inspect
+    ver = hashlib.md5((inspect.getsource(rc.classify) + rc.FACT_RE.pattern + rc.TOPIC_RE.pattern).encode()).hexdigest()[:10]
+    if ARCH.meta_get("classify_ver") == ver:
+        return
+    total, bad = ARCH.recheck(_keep)
+    ARCH.meta_set("classify_ver", ver)
+    sample = [{"ch": ch, "id": mid, "c": c, "x": (x or "")[:260]} for _, ch, mid, c, x in bad]
+    out = {"ver": ver, "checked": total, "removed": len(bad), "at": datetime.now(KYIV).isoformat(timespec="minutes"), "items": sample[:3000]}
+    for d in (DATA, WWW):
+        try:
+            (d / "reclass.json").write_text(json.dumps(out, ensure_ascii=False))
+        except Exception:
+            pass
+    log(f"Архів перевірено новою методикою: {total} записів, відкинуто {len(bad)}")
+
+
 async def backfill(client):
     """Повільно дочитує історію каналів рейтингу (з 24.02.2022) — лише для архіву влучань."""
     await RESOLVED.wait()
@@ -438,11 +465,14 @@ async def main():
     try:
         from archive import Archive
         ARCH = Archive(DATA)
-        for (ch, mid), ev in list(by_msg.items()):
+        for (ch, mid), ev in list(by_msg.items()):     # події з events.json — теж за поточною методикою
+            if ev:
+                ev[:] = [e for e in ev if _keep(e.get("x") or "", e["c"])]
             if ev:
                 ARCH.put(ch, mid, ev, lambda c: rc.CITY_REGION.get(c, ""))
         ARCH.commit()
         notifier.archive = ARCH
+        _recheck_archive()
         log("Архів влучань: " + json.dumps(ARCH.query({}), ensure_ascii=False))
     except Exception as e:
         ARCH = None

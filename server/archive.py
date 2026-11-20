@@ -18,6 +18,8 @@ class Archive:
         self.db.execute("CREATE INDEX IF NOT EXISTS hits_day ON hits(day)")
         self.db.execute("CREATE INDEX IF NOT EXISTS hits_city_day ON hits(city, day)")
         self.db.execute("CREATE TABLE IF NOT EXISTS backfill(ch TEXT PRIMARY KEY, min_id INTEGER, done INTEGER DEFAULT 0, oldest TEXT)")
+        self.db.execute("CREATE TABLE IF NOT EXISTS hits_removed AS SELECT * FROM hits WHERE 0")
+        self.db.execute("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT)")
         self.db.commit()
         self.pending = 0
 
@@ -38,6 +40,28 @@ class Archive:
         with self.lock:
             self.db.commit()
             self.pending = 0
+
+    def meta_get(self, k):
+        r = self.db.execute("SELECT v FROM meta WHERE k=?", (k,)).fetchone()
+        return r[0] if r else None
+
+    def meta_set(self, k, v):
+        with self.lock:
+            self.db.execute("INSERT OR REPLACE INTO meta VALUES (?,?)", (k, v))
+            self.db.commit()
+
+    def recheck(self, keep):
+        """Перевіряє весь архів новою методикою: keep(text, city) -> False означає хибне «влучання».
+        Відкинуті записи не видаляються назавжди, а переносяться в hits_removed (можна повернути)."""
+        with self.lock:
+            rows = self.db.execute("SELECT rowid, ch, id, city, x FROM hits").fetchall()
+        bad = [r for r in rows if not keep(r[4] or "", r[3])]
+        with self.lock:
+            for rowid, *_ in bad:
+                self.db.execute("INSERT INTO hits_removed SELECT * FROM hits WHERE rowid=?", (rowid,))
+                self.db.execute("DELETE FROM hits WHERE rowid=?", (rowid,))
+            self.db.commit()
+        return len(rows), bad
 
     # --- дочитування історії каналу ---
     def bf_get(self, ch):
