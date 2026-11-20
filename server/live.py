@@ -57,6 +57,8 @@ BOT = {"name": None, "err": None, "vapid": None}
 THREATS = []                 # попередження «що куди летить» за останні 24 год
 THREAT_SEEN = set()          # (канал, id) уже розібраних дописів
 subs = {}                      # chat_id -> {"cities": [...], "all": bool}
+ARCH = None                    # архів влучань (SQLite), див. archive.py
+ARCH_FROM = datetime(2022, 2, 24, tzinfo=KYIV)   # з якої дати дочитувати історію каналів
 NOTIFY_MAX_AGE = 90 * 60       # не сповіщати про дописи, старші за 90 хв (наприклад, під час дочитування)
 
 
@@ -88,6 +90,11 @@ def upsert(m, ch):
             if new:
                 log(f"+ {ch}/{m.id}: {', '.join(e['c'] for e in new)}")
         by_msg[(ch, m.id)] = new
+        if ARCH is not None and new != old:
+            try:
+                ARCH.put(ch, m.id, new, lambda c: rc.CITY_REGION.get(c, ""))
+            except Exception as e:
+                log(f"! архів: {e}")
         added = {e["c"] for e in new} - {e["c"] for e in (old or [])}
         if added and notify_q is not None and notify_q.qsize() < 500 and (time.time() - m.date.timestamp()) < NOTIFY_MAX_AGE:
             for e in new:
@@ -161,6 +168,8 @@ async def writer():
         if dirty or time.time() - last > 60:      # раз на хвилину — «пульс», щоб додаток бачив, що сервер живий
             write()
             last = time.time()
+            if ARCH is not None:
+                ARCH.commit()
 
 
 ERRS = {}                      # канал -> причина, чому не знайдено
@@ -335,6 +344,48 @@ async def fast_poll_loop(client):
         await asyncio.sleep(max(5, 60 - (time.time() - t)))
 
 
+async def backfill(client):
+    """Повільно дочитує історію каналів рейтингу (з 24.02.2022) — лише для архіву влучань."""
+    await RESOLVED.wait()
+    await asyncio.sleep(300)
+    while True:
+        todo = [c for c in channels if c.lower() not in THREAT_ONLY and c in ENT and not (ARCH.bf_get(c) or {}).get("done")]
+        if not todo:
+            log("Архів: історію всіх каналів дочитано")
+            return
+        for ch in todo:
+            bf = ARCH.bf_get(ch) or {}
+            start = bf.get("min_id") or min([i for (c, i) in by_msg if c == ch] + [state["last_id"].get(ch) or 0]) or 0
+            n = found = 0
+            last_id, oldest = start, bf.get("oldest")
+            try:
+                async for m in client.iter_messages(ENT[ch], offset_id=start, wait_time=1.5):
+                    if m.date < ARCH_FROM:
+                        break
+                    ev = process_message(m, ch, city_res)
+                    if ev:
+                        ARCH.put(ch, m.id, ev, lambda c: rc.CITY_REGION.get(c, ""))
+                        found += 1
+                    n += 1
+                    last_id, oldest = m.id, m.date.astimezone(KYIV).isoformat(timespec="minutes")
+                    if n % 300 == 0:
+                        ARCH.bf_set(ch, last_id, 0, oldest)
+                    if n >= 3000:          # по черзі між каналами, щоб архів наповнювався рівномірно
+                        break
+                done = 1 if n < 3000 else 0
+                ARCH.bf_set(ch, last_id, done, oldest)
+                log(f"Архів {ch}: +{n} дописів, влучань {found}, дійшли до {oldest}{' — готово' if done else ''}")
+            except FloodWaitError as e:
+                ARCH.bf_set(ch, last_id, 0, oldest)
+                log(f"! архів {ch}: FloodWait {e.seconds} с")
+                await asyncio.sleep(min(e.seconds, 3600) + 5)
+            except Exception as e:
+                ARCH.bf_set(ch, last_id, 1 if "private" in str(e).lower() else 0, oldest)
+                log(f"! архів {ch}: {type(e).__name__}: {e}")
+            ARCH.commit()
+            await asyncio.sleep(20)
+
+
 async def catch_up_loop(client):
     await RESOLVED.wait()
     while True:
@@ -383,6 +434,19 @@ async def main():
         notifier.stats = Stats(DATA)
     except Exception as e:
         log(f"! Статистика не запустилась: {type(e).__name__}: {e}")
+    global ARCH
+    try:
+        from archive import Archive
+        ARCH = Archive(DATA)
+        for (ch, mid), ev in list(by_msg.items()):
+            if ev:
+                ARCH.put(ch, mid, ev, lambda c: rc.CITY_REGION.get(c, ""))
+        ARCH.commit()
+        notifier.archive = ARCH
+        log("Архів влучань: " + json.dumps(ARCH.query({}), ensure_ascii=False))
+    except Exception as e:
+        ARCH = None
+        log(f"! Архів не запустився: {type(e).__name__}: {e}")
     try:
         from push import Push
         notifier.push = await asyncio.to_thread(Push, DATA, log)
@@ -409,6 +473,8 @@ async def main():
     await client.catch_up()
     tasks = [asyncio.create_task(writer()), asyncio.create_task(resolve_and_join(client)),
              asyncio.create_task(catch_up_loop(client)), asyncio.create_task(fast_poll_loop(client))]
+    if ARCH is not None:
+        tasks.append(asyncio.create_task(backfill(client)))
 
     async def _discover():
         await RESOLVED.wait()

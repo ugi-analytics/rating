@@ -41,6 +41,7 @@ class Notifier:
         self.cities = sorted(rc.COORDS)
         self.push = None
         self.stats = None
+        self.archive = None
         self._sender_task = None
 
     # ---------- збереження ----------
@@ -279,6 +280,16 @@ button{margin-top:18px;width:100%;padding:12px;border:0;border-radius:8px;backgr
                 writer.write((f"HTTP/1.1 {st}\r\nContent-Type: {ct}\r\nContent-Length: {len(data)}\r\n"
                               "Access-Control-Allow-Methods: POST, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n"
                               "Access-Control-Max-Age: 86400\r\nConnection: close\r\n\r\n").encode() + data)
+                await writer.drain()
+                return
+            if path == "/login/archive":
+                try:
+                    res = self.archive.query(parse_qs(urlparse(target).query)) if self.archive else {"error": "архів ще не готовий"}
+                except Exception as e:
+                    res = {"error": str(e)[:200]}
+                data = json.dumps(res, ensure_ascii=False, separators=(",", ":")).encode()
+                writer.write((f"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {len(data)}\r\n"
+                              "Access-Control-Allow-Origin: *\r\nCache-Control: public, max-age=60\r\nConnection: close\r\n\r\n").encode() + data)
                 await writer.drain()
                 return
             if path == "/login/hit":

@@ -306,6 +306,35 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
 .toast.show { transform: translate(-50%, 0); }
 @media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
 @media (max-width: 700px) { .mc-stats { gap: 10px 18px; } .mc-stats b { font-size: 19px; } .mc-head button { margin-left: 0; } .mc-feed li { grid-template-columns: 1fr; gap: 2px; } .live { gap: 10px; } .seg button { padding: 6px 9px; } }
+
+/* архів влучань */
+.ar-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.ar-bar input[type=date] { font: inherit; font-size: 14px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); color: var(--text-primary); color-scheme: dark; }
+.ar-nav { font: 600 15px var(--f-body); width: 34px; height: 32px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-1); color: var(--text-primary); cursor: pointer; }
+.ar-nav:disabled { opacity: .35; cursor: default; }
+.ar-cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; margin: 4px 0 14px; max-width: 420px; }
+.ar-cal .h { font-size: 11px; color: var(--text-muted); text-align: center; }
+.ar-cal button { font: 500 12px var(--f-body); aspect-ratio: 1.4; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-1); color: var(--text-secondary); cursor: pointer; position: relative; padding: 0; }
+.ar-cal button.l1 { background: rgba(242,163,58,.22); color: var(--text-primary); }
+.ar-cal button.l2 { background: rgba(242,163,58,.5); color: var(--text-primary); }
+.ar-cal button.l3 { background: #f2a33a; color: #11161d; font-weight: 700; }
+.ar-cal button.sel { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+.ar-cal button:disabled { opacity: .3; cursor: default; }
+.ar-mon { display: flex; align-items: center; gap: 8px; margin-top: 4px; font-weight: 600; font-size: 14px; }
+.ar-sum { color: var(--text-secondary); font-size: 13px; margin: 6px 0 10px; }
+.ar-sum b { color: var(--text-primary); }
+.ar-item { border-top: 1px solid var(--border); padding: 10px 0; }
+.ar-item:first-child { border-top: none; }
+.ar-top { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline; }
+.ar-time { font-variant-numeric: tabular-nums; color: var(--text-secondary); font-size: 13px; }
+.ar-city { font-weight: 700; }
+.ar-cas { font-size: 12px; color: #ff8a7a; }
+.ar-src { font-size: 12px; margin-left: auto; color: var(--text-secondary); }
+.ar-x { font-size: 13px; color: var(--text-secondary); margin-top: 4px; white-space: pre-line; overflow-wrap: anywhere; }
+.ar-x summary { cursor: pointer; list-style: none; }
+.ar-x summary::-webkit-details-marker { display: none; }
+.ar-x summary .more { color: var(--text-primary); text-decoration: underline; }
+.ar-empty { color: var(--text-secondary); font-size: 14px; padding: 10px 0; }
 </style>
 </head>
 <body style="background:#0e1217">
@@ -362,6 +391,21 @@ h1.title, .sub { text-shadow: 0 1px 12px rgba(14,18,23,.9); }
     <h2>Жертви та постраждалі</h2>
     <div class="desc">Оцінка, витягнута з текстів повідомлень: за кожну добу береться найбільше назване число, а потім суми додаються. Враховано лише повідомлення, де згадано одне місто. Цифри орієнтовні: перевіряйте їх за журналом нижче.</div>
     <div class="scroll" style="max-height:440px"><table id="cas"></table></div>
+  </section>
+
+  <section class="card js-only" id="archCard">
+    <h2>Архів влучань</h2>
+    <div class="desc" id="arDesc">Що сталося в будь-який день — у вашому чи будь-якому іншому місті. Лише влучання (не загрози), з посиланням на першоджерело.</div>
+    <div class="ar-bar">
+      <button type="button" class="ar-nav" id="arPrev" aria-label="Попередній день">‹</button>
+      <input type="date" id="arDay" aria-label="Дата">
+      <button type="button" class="ar-nav" id="arNext" aria-label="Наступний день">›</button>
+      <button type="button" class="city-btn" id="arCity" aria-haspopup="dialog">Усі міста</button>
+    </div>
+    <div class="ar-mon"><button type="button" class="ar-nav" id="arMPrev" aria-label="Попередній місяць">‹</button><span id="arMonth"></span><button type="button" class="ar-nav" id="arMNext" aria-label="Наступний місяць">›</button></div>
+    <div class="ar-cal" id="arCal" aria-label="Календар влучань"></div>
+    <div class="ar-sum" id="arSum"></div>
+    <div id="arList"></div>
   </section>
 
   <section class="card js-only" id="logCard">
@@ -1212,6 +1256,103 @@ renderReport(DATA);
       notifyNew(prev);
     } catch (e) { /* немає мережі або даних — лишається вбудований звіт */ }
   }
+
+  // ---------- архів влучань ----------
+  (function archive() {
+    const AR = SRCS[0].replace(/\/events\.json$/, '') + '/login/archive';
+    const MON = ['січень','лютий','березень','квітень','травень','червень','липень','серпень','вересень','жовтень','листопад','грудень'];
+    const pad = n => String(n).padStart(2, '0');
+    const iso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+    const today = iso(new Date());
+    let day = today, city = ls.get('rv_ar_city', null);
+    if (city === null) city = my || '';
+    let month = day.slice(0, 7), info = null, cal = {};
+    const get = async q => { const r = await fetch(AR + '?' + new URLSearchParams(q)); if (!r.ok) throw 0; return r.json(); };
+    const shift = (d, n) => { const x = new Date(d + 'T12:00'); x.setDate(x.getDate() + n); return iso(x); };
+    const fmtDay = d => { const x = new Date(d + 'T12:00'); return x.toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); };
+    function bar() {
+      $('arDay').value = day; $('arDay').max = today; if (info && info.from) $('arDay').min = info.from;
+      $('arNext').disabled = day >= today; $('arPrev').disabled = !!(info && info.from && day <= info.from);
+      $('arCity').textContent = city || 'Усі міста';
+      const [y, m] = month.split('-').map(Number);
+      $('arMonth').textContent = MON[m - 1] + ' ' + y;
+      $('arMNext').disabled = month >= today.slice(0, 7);
+      $('arMPrev').disabled = !!(info && info.from && month <= info.from.slice(0, 7));
+    }
+    async function drawCal() {
+      try { cal = (await get({ month, city })).days || {}; } catch (e) { cal = {}; }
+      const [y, m] = month.split('-').map(Number);
+      const first = new Date(y, m - 1, 1), n = new Date(y, m, 0).getDate(), off = (first.getDay() + 6) % 7;
+      let h = ['пн','вт','ср','чт','пт','сб','нд'].map(d => `<span class="h">${d}</span>`).join('') + '<span></span>'.repeat(off);
+      for (let i = 1; i <= n; i++) {
+        const d = month + '-' + pad(i), c = cal[d] || 0, lv = c ? (c >= 10 ? 3 : c >= 3 ? 2 : 1) : 0;
+        h += `<button type="button" data-d="${d}" class="${lv ? 'l' + lv : ''}${d === day ? ' sel' : ''}" ${d > today ? 'disabled' : ''} aria-label="${i}: ${c} влучань" title="${c ? c + ' повідомл.' : 'без влучань'}">${i}</button>`;
+      }
+      $('arCal').innerHTML = h;
+      $('arCal').querySelectorAll('button[data-d]').forEach(b => b.onclick = () => { day = b.dataset.d; show(); });
+    }
+    async function drawDay() {
+      $('arSum').textContent = 'Завантажую…'; $('arList').innerHTML = '';
+      let r;
+      try { r = await get({ day, city }); } catch (e) { $('arSum').textContent = 'Архів зараз недоступний. Спробуйте пізніше.'; return; }
+      const items = (r.items || []).slice().reverse();
+      const top = Object.entries(r.cities || {}).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([c, n]) => `${esc(c)} (${n})`).join(', ');
+      $('arSum').innerHTML = `<b>${esc(fmtDay(day))}</b>${city ? ' · ' + esc(city) : ''} — ` +
+        (items.length ? `повідомлень про влучання: <b>${items.length}</b>${!city && top ? '. Найбільше: ' + top : ''}` : 'повідомлень про влучання немає');
+      $('arList').innerHTML = items.length ? items.map(d => {
+        const x = d.x || '', short = x.length > 260;
+        const cas = [d.k ? `загинули: ${d.k}` : '', d.i ? `поранені: ${d.i}` : ''].filter(Boolean).join(', ');
+        return `<div class="ar-item"><div class="ar-top"><span class="ar-time">${esc(d.t.slice(11, 16))}</span>
+          <span class="ar-city">${d.cities.map(esc).join(', ')}</span>${cas ? `<span class="ar-cas">${cas}</span>` : ''}
+          <a class="ar-src" href="https://t.me/${encodeURIComponent(d.ch)}/${d.id}" target="_blank" rel="noopener">@${esc(d.ch)} ↗</a></div>
+          ${short ? `<details class="ar-x"><summary>${esc(x.slice(0, 260))}… <span class="more">далі</span></summary>${esc(x.slice(260))}</details>` : `<div class="ar-x">${esc(x)}</div>`}</div>`;
+      }).join('') : `<p class="ar-empty">${city ? 'У цей день у місті ' + esc(city) + ' влучань не зафіксовано.' : 'У цей день влучань не зафіксовано.'}</p>`;
+    }
+    async function show(recal) {
+      if (day.slice(0, 7) !== month) { month = day.slice(0, 7); recal = true; }
+      bar();
+      if (recal) await drawCal(); else $('arCal').querySelectorAll('button[data-d]').forEach(b => b.classList.toggle('sel', b.dataset.d === day));
+      drawDay();
+    }
+    function cityPicker() {
+      const all = J ? Object.keys(J.cities).sort((a, b) => a.localeCompare(b, 'uk')) : [];
+      $('phBox').innerHTML = `<h3 id="phTitle">Місто для архіву</h3>
+        <input type="search" id="arFind" class="cp-find" placeholder="Почніть вводити назву" autocomplete="off" aria-label="Пошук міста">
+        <div class="cp-list" id="arCList" role="listbox"></div>
+        <div class="ph-btns"><button type="button" id="arAll">Усі міста</button><button type="button" id="arCClose">Закрити</button></div>`;
+      $('permHelp').hidden = false;
+      const pick = n => { city = n; ls.set('rv_ar_city', city); $('permHelp').hidden = true; show(true); };
+      const draw = q => {
+        q = q.trim().toLowerCase().replace(/[’ʼ]/g, "'");
+        let list = q ? all.filter(n => n.toLowerCase().includes(q)).sort((a, b) => (b.toLowerCase().startsWith(q) - a.toLowerCase().startsWith(q))) : (my ? [my] : []).concat(all.filter(n => n !== my));
+        const more = list.length > 80 ? list.length - 80 : 0; list = list.slice(0, 80);
+        $('arCList').innerHTML = list.map(n => `<button type="button" class="cp-row cp-pick${n === city ? ' mine' : ''}" data-c="${esc(n)}" role="option">${esc(n)}${J.cities[n] && J.cities[n].r ? ` <small>${esc(J.cities[n].r)}</small>` : ''}</button>`).join('') + (more ? `<p class="cp-more">…і ще ${more}. Уточніть назву.</p>` : '');
+        $('arCList').querySelectorAll('.cp-pick').forEach(b => b.onclick = () => pick(b.dataset.c));
+      };
+      draw('');
+      $('arFind').oninput = e => draw(e.target.value);
+      $('arFind').onkeydown = e => { if (e.key === 'Enter') { const f = $('arCList').querySelector('.cp-pick'); if (f) pick(f.dataset.c); } if (e.key === 'Escape') $('permHelp').hidden = true; };
+      $('arAll').onclick = () => pick('');
+      $('arCClose').onclick = () => { $('permHelp').hidden = true; };
+      setTimeout(() => $('arFind').focus(), 50);
+    }
+    $('arPrev').onclick = () => { day = shift(day, -1); show(); };
+    $('arNext').onclick = () => { if (day < today) { day = shift(day, 1); show(); } };
+    $('arDay').onchange = e => { if (e.target.value) { day = e.target.value > today ? today : e.target.value; show(); } };
+    $('arMPrev').onclick = () => { const [y, m] = month.split('-').map(Number); month = iso(new Date(y, m - 2, 1)).slice(0, 7); bar(); drawCal(); };
+    $('arMNext').onclick = () => { const [y, m] = month.split('-').map(Number); const nm = iso(new Date(y, m, 1)).slice(0, 7); if (nm <= today.slice(0, 7)) { month = nm; bar(); drawCal(); } };
+    $('arCity').onclick = cityPicker;
+    get({}).then(i => {
+      info = i;
+      if (i && i.from) {
+        const d = new Date(i.from + 'T12:00').toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
+        const bf = i.backfill && i.backfill.channels && i.backfill.done < i.backfill.channels ? ' Архів ще поповнюється старими даними.' : '';
+        $('arDesc').textContent = `Що сталося в будь-який день — у вашому чи будь-якому іншому місті. Лише влучання (не загрози), з посиланням на першоджерело. Дані з ${d}.${bf}`;
+      }
+      bar();
+    }).catch(() => {});
+    show(true);
+  })();
   load(true);
   setInterval(() => { if (!document.hidden) load(false); }, 20000);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) load(false); });
