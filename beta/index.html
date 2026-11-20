@@ -31,6 +31,18 @@
   --accent:#e2611a; --accent-soft:#fde7da; --killed:#c62828; --injured:#b7791f; --live:#1a9e5a; --blue:#2a78d6;
   --side:#ffffff; color-scheme:light;
 }
+[data-theme=slate]{
+  --page:#12161c; --surface-1:#18202d; --surface-2:#1d2737; --border:#2a3546; --grid:#232c3a;
+  --text-primary:#e7ecf3; --text-secondary:#a9b4c4; --text-muted:#7c889a;
+  --accent:#f2a33a; --accent-soft:#3a2b14; --killed:#ff6b6b; --injured:#f5c542; --live:#3ddc97; --blue:#5aa9ff;
+  --side:#0f141b; color-scheme:dark;
+}
+[data-theme=soft]{
+  --page:#e7eaee; --surface-1:#f3f4f6; --surface-2:#e9ecf0; --border:#d3d8de; --grid:#dde1e6;
+  --text-primary:#1a2029; --text-secondary:#4a5361; --text-muted:#78818e;
+  --accent:#d9601c; --accent-soft:#f7e2d4; --killed:#c62828; --injured:#a96f12; --live:#1a8f52; --blue:#2a6fc4;
+  --side:#eef0f3; color-scheme:light;
+}
 html{font-size:15px} html[data-fs=lg]{font-size:17px} html[data-fs=sm]{font-size:14px}
 *{box-sizing:border-box}
 body{margin:0;background:var(--page);color:var(--text-primary);font:1rem/1.45 var(--f-body)}
@@ -116,6 +128,23 @@ tr.click{cursor:pointer} tr.click:hover td{background:var(--surface-2)}
 .hero .kpis .kpi.dead .val{color:#ff5d5d} .hero .kpis .kpi.inj .val{color:#f2b544} .hero .kpis .kpi.acc .val{color:#ff7a2f}
 .hero .kpis .up{color:#ff8a7a} .hero .kpis .down{color:#3ddc84}
 @media (max-width:820px){.hero{padding:16px}.hero h2{font-size:18px}.hero .lead{margin-bottom:110px}}
+/* календар архіву */
+.cal{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;max-width:460px}
+.cal .h{font-size:11px;color:var(--text-muted);text-align:center}
+.cal button{font:600 12px var(--f-body);aspect-ratio:1.35;border:1px solid var(--border);border-radius:7px;background:var(--surface-2);color:var(--text-secondary);cursor:pointer;padding:0}
+.cal button.l1{background:color-mix(in srgb,var(--accent) 22%,var(--surface-2));color:var(--text-primary)}
+.cal button.l2{background:color-mix(in srgb,var(--accent) 50%,var(--surface-2));color:var(--text-primary)}
+.cal button.l3{background:var(--accent);color:#fff;font-weight:800}
+.cal button.sel{outline:2px solid var(--text-primary);outline-offset:1px}
+.cal button:disabled{opacity:.3;cursor:default}
+.calhead{display:flex;align-items:center;gap:8px;font-weight:700;margin-bottom:8px}
+.navb{width:32px;height:30px;border:1px solid var(--border);border-radius:8px;background:var(--surface-1);cursor:pointer}
+.navb:disabled{opacity:.35;cursor:default}
+.archgrid{display:grid;grid-template-columns:minmax(0,480px) minmax(0,1fr);gap:16px;align-items:start}
+@media (max-width:1000px){.archgrid{grid-template-columns:1fr}}
+.cmpchips{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.cmpchips .chip b{margin-left:6px;color:var(--text-muted)}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
 /* пости */
 .feed .it{padding:11px 0;border-bottom:1px solid var(--border)}
 .feed .it:last-child{border-bottom:0}
@@ -232,6 +261,7 @@ const PAGES = [
   { id: 'home', t: 'Головна', ic: 'home' },
   { id: 'threats', t: 'Загрози', ic: 'thr' },
   { id: 'map', t: 'Карта', ic: 'map' },
+  { id: 'analytics', t: 'Аналітика', ic: 'an' },
   { id: 'cities', t: 'Міста', ic: 'city' },
   { id: 'archive', t: 'Архів', ic: 'arch' }
 ];
@@ -353,7 +383,7 @@ function periodBar(kind) {
   }
   el.innerHTML = `<span class="lab">Період:</span><div class="seg">${PERIODS.map(([k, t]) => `<button type="button" data-k="${k}" aria-pressed="${S.period === k}">${t}</button>`).join('')}</div>` +
     (S.period === 'custom' ? ` <input class="inp" type="date" id="pf" value="${range()[0]}"> — <input class="inp" type="date" id="pt" value="${range()[1]}" max="${kyivToday()}">` : '');
-  el.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { S.period = b.dataset.k; ls.set('nb_period', S.period); route(); });
+  el.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { S.period = b.dataset.k; ls.set('nb_period', S.period); arDay = null; arMonth = null; route(); });
   if ($('pf')) { $('pf').onchange = e => { S.from = e.target.value; ls.set('nb_from', S.from); route(); }; $('pt').onchange = e => { S.to = e.target.value; ls.set('nb_to', S.to); route(); }; }
   const first = S.inc && S.inc.length ? S.inc[S.inc.length - 1].day : null;
   note.textContent = kind === 'archive' ? 'Архів: усі зафіксовані влучання з 24.02.2022 (поступово поповнюється).' :
@@ -400,7 +430,7 @@ let mapObj = null;
 const UA = [[44.4, 22.2], [52.3, 40.2]];
 function tiles(m) {
   const esri = s => `https://server.arcgisonline.com/ArcGIS/rest/services/${s}/MapServer/tile/{z}/{y}/{x}`;
-  const light = document.documentElement.dataset.theme === 'light';
+  const light = ['light', 'soft'].includes(document.documentElement.dataset.theme);
   L.tileLayer(esri(light ? 'Canvas/World_Light_Gray_Base' : 'Canvas/World_Dark_Gray_Base'), { maxZoom: 15, attribution: '&copy; Esri' }).addTo(m);
   L.tileLayer(esri(light ? 'Canvas/World_Light_Gray_Reference' : 'Canvas/World_Dark_Gray_Reference'), { maxZoom: 15 }).addTo(m);
 }
@@ -532,7 +562,7 @@ function pageHome() {
   const lead = rank.length ? `Найбільше подій: ${rank.slice(0, 3).map(r => esc(r.c) + ' (' + r.n + ')').join(', ')}.` : 'Подій за цей період не зафіксовано.';
   $('view').innerHTML = `
     <section class="hero"><canvas id="heroBg" aria-hidden="true"></canvas><h2>Де влучало за ${R[2]}</h2><p class="lead">${lead}</p>
-    <div class="grid kpis">${kpi('Зафіксовані події', A.n, B.n, 'acc', '#/archive', hp)}${kpi('Міста з подіями', A.cities, B.cities, '', '#/cities', hp)}${kpi('Загиблі', A.k, B.k, 'dead', '#/archive', hp)}${kpi('Поранені', A.i, B.i, 'inj', '#/archive', hp)}</div></section>
+    <div class="grid kpis">${kpi('Зафіксовані події', A.n, B.n, 'acc', '#/analytics', hp)}${kpi('Міста з подіями', A.cities, B.cities, '', '#/cities', hp)}${kpi('Загиблі', A.k, B.k, 'dead', '#/analytics', hp)}${kpi('Поранені', A.i, B.i, 'inj', '#/analytics', hp)}</div></section>
     <a class="card" href="#/threats" style="display:flex;align-items:center;gap:12px;margin-top:16px;text-decoration:none;color:inherit">
       <span class="dot ${thMy ? 'r' : 'g'}"></span><span><b>Загрози зараз</b> — ${S.my ? (thMy ? `у радіусі ${S.rad} км від міста ${esc(S.my)} за ${TPERIODS.find(p => p[0] === S.tper)[1].toLowerCase()}: <b>${thMy}</b> ${plural(thMy, 'повідомлення', 'повідомлення', 'повідомлень')}` : `поруч із містом ${esc(S.my)} загроз не повідомлялось`) : 'виберіть «Моє місто» в налаштуваннях, щоб бачити свій регіон'}</span><span style="margin-left:auto" class="btn">Стрічка загроз</span></a>
     <div class="grid two" style="margin-top:16px">
@@ -650,7 +680,7 @@ function pageCity(name) {
   $('view').innerHTML = `<p style="margin:0 0 12px"><a href="#/cities">← Усі міста</a></p>
     <section class="card"><div class="cardhead"><div><h2 style="font-size:20px">${esc(name)}</h2><p class="sub">${esc(S.J.cities[name].r || '')} · остання подія: ${all.length ? dfmt(all[0].day) : 'не зафіксовано'}</p></div>
       ${S.my === name ? '<span class="tag ok">Моє місто</span>' : `<button class="btn" id="setMy">Зробити моїм містом</button>`}</div>
-    <div class="grid kpis">${kpi('Подій за ' + R[2], A.n, B.n, 'acc', '#/archive', hp)}${kpi('Днів із подіями', A.days, B.days, '', '#/archive', hp)}${kpi('Загиблі', A.k, B.k, 'dead', '#/archive', hp)}${kpi('Поранені', A.i, B.i, 'inj', '#/archive', hp)}</div></section>
+    <div class="grid kpis">${kpi('Подій за ' + R[2], A.n, B.n, 'acc', '#/archive', hp)}${kpi('Днів із подіями', A.days, B.days, '', '#/archive', hp)}${kpi('Загиблі', A.k, B.k, 'dead', '#/analytics', hp)}${kpi('Поранені', A.i, B.i, 'inj', '#/analytics', hp)}</div></section>
     <section class="card" style="margin-top:16px"><h2>Динаміка</h2><p class="sub">Події по тижнях за ${R[2]}</p><div id="cdyn"></div></section>
     <section class="card feed" style="margin-top:16px"><h2>Історія подій</h2><p class="sub">Хронологія за ${R[2]}. Давніші — у розділі «Архів».</p>${feedHtml(cur)}</section>`;
   barChart($('cdyn'), series(cur, R, 'w'), 'Динаміка подій міста');
@@ -658,38 +688,122 @@ function pageCity(name) {
   $('view').querySelectorAll('a.kpi[href="#/archive"]').forEach(a => a.onclick = () => ls.set('nb_acity', name));
 }
 
-let arT = null;
+let arT = null, arMonth = null, arDay = null;
 function pageArchive() {
   periodBar('archive');
   const R = range(), q = ls.get('nb_aq', ''), city = ls.get('nb_acity', ''), reg = ls.get('nb_areg', '');
+  const today = kyivToday();
+  if (!arMonth) arMonth = (arDay || R[1]).slice(0, 7);
   const regs = S.J ? [...new Set(Object.values(S.J.cities).map(c => c.r).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'uk')) : [];
   $('view').innerHTML = `<div class="bar-row"><input class="inp" id="aq" type="search" placeholder="Пошук у тексті…" value="${esc(q)}" style="min-width:200px">
     <input class="inp" id="acity" list="acl" placeholder="Місто" value="${esc(city)}" style="width:170px"><datalist id="acl">${S.J ? Object.keys(S.J.cities).map(c => `<option value="${esc(c)}">`).join('') : ''}</datalist>
     <select class="inp" id="areg"><option value="">Усі області</option>${regs.map(r => `<option${r === reg ? ' selected' : ''}>${esc(r)}</option>`).join('')}</select>
     <button class="btn" id="aclear" type="button">Скинути</button></div>
-    <section class="card feed"><div id="ares">${loading()}</div></section>`;
+    <div class="archgrid"><section class="card"><div class="calhead"><button class="navb" id="cPrev" aria-label="Попередній місяць">‹</button><span id="cTitle" style="flex:1;text-align:center"></span><button class="navb" id="cNext" aria-label="Наступний місяць">›</button></div>
+      <div class="cal" id="cal"></div>
+      <div class="legend"><span><i style="background:color-mix(in srgb,var(--accent) 22%,var(--surface-2))"></i>1–2</span><span><i style="background:color-mix(in srgb,var(--accent) 50%,var(--surface-2))"></i>3–9</span><span><i></i>10 і більше повідомлень</span></div>
+      <p class="sub" style="margin-top:10px">Натисніть день, щоб побачити його події. ${arDay ? '<a href="#" id="calAll">Показати весь період</a>' : ''}</p></section>
+    <section class="card feed"><div id="ares">${loading()}</div></section></div>`;
+  const MONF = ['Січень', 'Лютий', 'Березень', 'Квітень', 'Травень', 'Червень', 'Липень', 'Серпень', 'Вересень', 'Жовтень', 'Листопад', 'Грудень'];
+  const cal = async () => {
+    const [y, m] = arMonth.split('-').map(Number);
+    $('cTitle').textContent = MONF[m - 1] + ' ' + y;
+    $('cNext').disabled = arMonth >= today.slice(0, 7); $('cPrev').disabled = arMonth <= '2022-02';
+    let days = {};
+    try { const p = { month: arMonth }; const cc = $('acity').value.trim(); if (cc) p.city = cc; days = (await (await fetch(API + '/login/archive?' + new URLSearchParams(p))).json()).days || {}; } catch (e) { }
+    const n = new Date(y, m, 0).getDate(), off = (new Date(y, m - 1, 1).getDay() + 6) % 7;
+    let h = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'нд'].map(d => `<span class="h">${d}</span>`).join('') + '<span></span>'.repeat(off);
+    for (let i = 1; i <= n; i++) {
+      const d = arMonth + '-' + pad(i), c = days[d] || 0, lv = c ? (c >= 10 ? 3 : c >= 3 ? 2 : 1) : 0;
+      h += `<button type="button" data-d="${d}" class="${lv ? 'l' + lv : ''}${d === arDay ? ' sel' : ''}" ${d > today || d < '2022-02-24' ? 'disabled' : ''} title="${c ? c + ' повідомл.' : 'без влучань'}" aria-label="${i}: ${c} повідомлень">${i}</button>`;
+    }
+    $('cal').innerHTML = h;
+    $('cal').querySelectorAll('[data-d]').forEach(b => b.onclick = () => { arDay = b.dataset.d; pageArchive(); });
+  };
   const run = async () => {
-    const p = { from: R[0], to: R[1] }; const qq = $('aq').value.trim(), cc = $('acity').value.trim(), rr = $('areg').value;
+    const p = arDay ? { from: arDay, to: arDay } : { from: S.period === 'all' ? '2022-02-24' : R[0], to: R[1] };
+    const qq = $('aq').value.trim(), cc = $('acity').value.trim(), rr = $('areg').value;
     ls.set('nb_aq', qq); ls.set('nb_acity', cc); ls.set('nb_areg', rr);
     if (qq) p.q = qq; if (cc) p.city = cc; if (rr) p.region = rr;
-    if (S.period === 'all') p.from = '2022-02-24';
     $('ares').innerHTML = loading();
     try {
       const r = await (await fetch(API + '/login/archive?' + new URLSearchParams(p))).json();
       if (r.error) throw r.error;
       const items = r.items || [];
-      $('ares').innerHTML = `<p class="sub">Знайдено повідомлень: <b>${items.length}</b>${r.truncated ? ' (показано перші 3000 — уточніть пошук)' : ''} · ${dfmt(p.from)} — ${dfmt(p.to)}</p>` +
+      const head = arDay ? new Date(arDay + 'T12:00').toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) : `${dfmt(p.from)} — ${dfmt(p.to)}`;
+      $('ares').innerHTML = `<h2 style="text-transform:none">${esc(head)}</h2><p class="sub">Повідомлень про влучання: <b>${items.length}</b>${r.truncated ? ' (показано перші 3000 — уточніть пошук)' : ''}</p>` +
         (items.length ? items.slice(0, 400).map(d => { const cas = [d.k ? `загинули: ${d.k}` : '', d.i ? `поранені: ${d.i}` : ''].filter(Boolean).join(', '), off = OFFICIAL.has(d.ch.toLowerCase()), x = (d.x || '').replace(/\s+/g, ' ');
-          return `<div class="it"><div class="h"><span class="when">${dfmt(d.t)} ${d.t.slice(11, 16)}</span>${d.cities.map(c => `<a class="city" href="#/city/${encodeURIComponent(c)}">${esc(c)}</a>`).join(', ')}
+          return `<div class="it"><div class="h"><span class="when">${arDay ? '' : dfmt(d.t) + ' '}${d.t.slice(11, 16)}</span>${d.cities.map(c => `<a class="city" href="#/city/${encodeURIComponent(c)}">${esc(c)}</a>`).join(', ')}
             <span class="tag cat">Влучання</span><span class="tag ${off ? 'ok' : 'one'}">${off ? 'Офіційне джерело' : 'Неофіційне джерело'}</span>${cas ? `<span class="cas">${cas}</span>` : ''}
             <a class="src" href="https://t.me/${encodeURIComponent(d.ch)}/${d.id}" target="_blank" rel="noopener">@${esc(d.ch)} ↗</a></div><div class="x">${esc(x.length > 300 ? x.slice(0, 300) + '…' : x)}</div></div>`; }).join('') +
-          (items.length > 400 ? '<p class="sub">Показано 400 найновіших. Звузьте період або додайте фільтр.</p>' : '') : '<div class="state">За цими умовами нічого не знайдено.</div>');
+          (items.length > 400 ? '<p class="sub">Показано 400 найновіших. Звузьте період або додайте фільтр.</p>' : '') : `<div class="state">${arDay ? 'У цей день влучань не зафіксовано.' : 'За цими умовами нічого не знайдено.'}</div>`);
     } catch (e) { $('ares').innerHTML = '<div class="state err">Архів зараз недоступний. Спробуйте пізніше.</div>'; }
   };
+  $('cPrev').onclick = () => { const [y, m] = arMonth.split('-').map(Number); arMonth = isoD(new Date(y, m - 2, 1)).slice(0, 7); cal(); };
+  $('cNext').onclick = () => { const [y, m] = arMonth.split('-').map(Number); const nm = isoD(new Date(y, m, 1)).slice(0, 7); if (nm <= today.slice(0, 7)) { arMonth = nm; cal(); } };
+  if ($('calAll')) $('calAll').onclick = e => { e.preventDefault(); arDay = null; pageArchive(); };
   $('aq').oninput = () => { clearTimeout(arT); arT = setTimeout(run, 500); };
-  $('acity').onchange = run; $('areg').onchange = run;
-  $('aclear').onclick = () => { $('aq').value = ''; $('acity').value = ''; $('areg').value = ''; run(); };
-  run();
+  $('acity').onchange = () => { cal(); run(); }; $('areg').onchange = run;
+  $('aclear').onclick = () => { $('aq').value = ''; $('acity').value = ''; $('areg').value = ''; arDay = null; pageArchive(); };
+  cal(); run();
+}
+
+// ---------- аналітика ----------
+const PAL = ['#3987e5', '#ff7a2f', '#199e70', '#c98500', '#d55181', '#9085e9'];
+function pageAnalytics() {
+  periodBar('days'); if (!guard()) return;
+  const R = range(), P = prevRange(R), cur = S.inc.filter(it => inR(it, R)), prev = S.inc.filter(it => inR(it, P)), hp = hasPrevData(P);
+  const byC = {}, byP = {}; cur.forEach(it => (byC[it.city] = byC[it.city] || []).push(it)); prev.forEach(it => (byP[it.city] = byP[it.city] || []).push(it));
+  const top = Object.entries(byC).sort((a, b) => b[1].length - a[1].length).map(x => x[0]);
+  let sel = JSON.parse(ls.get('nb_cmp', '[]')).filter(c => S.J.cities[c]);
+  if (!sel.length) sel = (S.my && byC[S.my] ? [S.my] : []).concat(top.filter(c => c !== S.my)).slice(0, 3);
+  const metric = ls.get('nb_rmet', 'n');
+  // порівняння міст
+  const total = cur.length || 1;
+  const rows = sel.map((c, i) => { const a = agg(byC[c] || []), b = agg(byP[c] || []); return { c, col: PAL[i % PAL.length], a, b, share: Math.round(a.n / total * 1000) / 10 }; });
+  // розподіл за днями тижня (день події)
+  const DOW = ['пн', 'вт', 'ср', 'чт', 'пт', 'сб', 'нд'], dow = [0, 0, 0, 0, 0, 0, 0];
+  cur.forEach(it => dow[(new Date(it.day + 'T12:00').getDay() + 6) % 7]++);
+  // розподіл за годинами (час першого повідомлення про подію — час публікації, не час удару)
+  const hrs = Array(24).fill(0); cur.forEach(it => hrs[+hm(it.t).slice(0, 2)]++);
+  // рейтинги
+  const MET = { n: ['подій', x => x.n], d: ['днів із подіями', x => x.days], k: ['загиблих', x => x.k], i: ['поранених', x => x.i], ch: ['зростання подій', x => x.n - x.p] };
+  const rank = Object.entries(byC).map(([c, l]) => ({ c, ...agg(l), p: (byP[c] || []).length })).sort((a, b) => MET[metric][1](b) - MET[metric][1](a)).slice(0, 15);
+  const cell = (v, pv) => { const ch = change(v, pv); return `<td class="n">${fmt(v)}${hp ? `<div class="${ch.cls}" style="font-size:12px">${ch.txt}</div>` : ''}</td>`; };
+  $('view').innerHTML = `
+    <section class="card"><div class="cardhead"><div><h2>Порівняння міст</h2><p class="sub">За ${R[2]}${hp ? ', зі зміною до попереднього такого ж періоду' : ''}</p></div></div>
+      <div class="cmpchips" style="margin-bottom:12px">${rows.map(r => `<button class="chip" aria-pressed="true" data-rm="${esc(r.c)}"><span class="sw" style="background:${r.col}"></span>${esc(r.c)} ✕</button>`).join('')}
+        ${sel.length < 6 ? `<input class="inp" id="addc" list="addl" placeholder="+ додати місто" style="width:170px"><datalist id="addl">${Object.keys(S.J.cities).filter(c => !sel.includes(c)).map(c => `<option value="${esc(c)}">`).join('')}</datalist>` : ''}</div>
+      <div class="scroll"><table><tr><th>Місто</th><th class="n">Подій</th><th class="n">Днів із подіями</th><th class="n">Загиблі</th><th class="n">Поранені</th><th class="n">Частка всіх подій</th></tr>
+      ${rows.map(r => `<tr><td><span class="sw" style="background:${r.col}"></span><a href="#/city/${encodeURIComponent(r.c)}"><b>${esc(r.c)}</b></a></td>${cell(r.a.n, r.b.n)}${cell(r.a.days, r.b.days)}${cell(r.a.k, r.b.k)}${cell(r.a.i, r.b.i)}<td class="n">${r.share}%</td></tr>`).join('')}</table></div>
+      <h2 style="margin-top:16px">Динаміка по тижнях</h2><div id="cmpLines"></div></section>
+    <div class="grid two" style="margin-top:16px">
+      <section class="card"><h2>За днями тижня</h2><p class="sub">Скільки подій припало на кожен день тижня</p><div id="dow"></div></section>
+      <section class="card"><h2>За годинами</h2><p class="sub">За часом першого повідомлення про подію (не точний час удару)</p><div id="hrs"></div></section>
+    </div>
+    <section class="card" style="margin-top:16px"><div class="cardhead"><div><h2>Рейтинг міст</h2><p class="sub">За ${R[2]}</p></div>
+      <select class="inp" id="rmet">${Object.entries(MET).map(([k, v]) => `<option value="${k}"${k === metric ? ' selected' : ''}>За кількістю ${v[0]}</option>`).join('').replace('За кількістю зростання подій', 'За зростанням подій')}</select></div>
+      ${rank.length ? `<div class="scroll"><table><tr><th>#</th><th>Місто</th><th class="n">Подій</th><th class="n">Днів</th><th class="n">Загиблі</th><th class="n">Поранені</th><th class="n">Зміна</th></tr>
+      ${rank.map((r, i) => `<tr class="click" data-c="${esc(r.c)}"><td>${i + 1}</td><td><b>${esc(r.c)}</b></td><td class="n">${r.n}</td><td class="n">${r.days}</td><td class="n">${r.k || '—'}</td><td class="n">${r.i || '—'}</td><td class="n ${hp ? change(r.n, r.p).cls : 'flat'}">${hp ? (r.p ? (r.n - r.p > 0 ? '+' : '') + (r.n - r.p) : 'нове') : '—'}</td></tr>`).join('')}</table></div>` : '<div class="state">Подій немає.</div>'}</section>
+    <section class="card" style="margin-top:16px"><h2>Календар інтенсивності</h2><p class="sub">Повний календар по днях — у розділі <a href="#/archive">«Архів»</a> (натисніть день, щоб побачити події).</p></section>`;
+  // лінії по тижнях для вибраних міст
+  const wk = series([], R, 'w').map(x => x.k);
+  if (wk.length) {
+    const W = 800, H = 220, Pd = { l: 34, r: 10, t: 10, b: 26 }, data = rows.map(r => { const m = {}; (byC[r.c] || []).forEach(it => { const k = keyOf(it.day, 'w'); m[k] = (m[k] || 0) + 1; }); return wk.map(k => m[k] || 0); });
+    const max = Math.max(1, ...data.flat()), x = i => Pd.l + (W - Pd.l - Pd.r) * (wk.length === 1 ? .5 : i / (wk.length - 1)), y = v => H - Pd.b - (H - Pd.t - Pd.b) * v / max;
+    let g = [...new Set([0, Math.round(max / 2), max])].map(v => `<line class="gridl" x1="${Pd.l}" x2="${W - Pd.r}" y1="${y(v)}" y2="${y(v)}"/><text class="axis" x="${Pd.l - 6}" y="${y(v) + 4}" text-anchor="end">${v}</text>`).join('');
+    const step = Math.max(1, Math.ceil(wk.length / 8)); wk.forEach((k, i) => { if (i % step === 0) g += `<text class="axis" x="${x(i)}" y="${H - 8}" text-anchor="middle">${k.slice(8)}.${k.slice(5, 7)}</text>`; });
+    data.forEach((d, j) => { g += `<polyline fill="none" stroke="${rows[j].col}" stroke-width="2" points="${d.map((v, i) => x(i) + ',' + y(v)).join(' ')}"/>` + d.map((v, i) => `<circle cx="${x(i)}" cy="${y(v)}" r="4" fill="${rows[j].col}" stroke="var(--surface-1)" stroke-width="2"><title>${esc(rows[j].c)}, тиждень з ${dfmt(wk[i])}: ${v}</title></circle>`).join(''); });
+    $('cmpLines').innerHTML = `<div class="chart"><svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Динаміка подій вибраних міст по тижнях">${g}</svg></div>
+      <details style="margin-top:8px"><summary style="cursor:pointer;color:var(--text-secondary);font-size:13px">Вихідні значення</summary><div class="scroll" style="max-height:240px"><table><tr><th>Тиждень з</th>${rows.map(r => `<th class="n">${esc(r.c)}</th>`).join('')}</tr>${wk.map((k, i) => `<tr><td>${dfmt(k)}</td>${data.map(d => `<td class="n">${d[i]}</td>`).join('')}</tr>`).join('')}</table></div></details>`;
+  }
+  barChart($('dow'), DOW.map((d, i) => ({ v: dow[i], short: d, long: d })), 'Події за днями тижня');
+  barChart($('hrs'), hrs.map((v, i) => ({ v, short: String(i), long: `${pad(i)}:00–${pad(i)}:59` })), 'Події за годинами');
+  const save = l => { ls.set('nb_cmp', JSON.stringify(l)); pageAnalytics(); };
+  $('view').querySelectorAll('[data-rm]').forEach(b => b.onclick = () => save(sel.filter(c => c !== b.dataset.rm)));
+  if ($('addc')) $('addc').onchange = e => { const v = e.target.value.trim(); if (S.J.cities[v] && !sel.includes(v)) save(sel.concat(v)); };
+  $('rmet').onchange = e => { ls.set('nb_rmet', e.target.value); pageAnalytics(); };
+  $('view').querySelectorAll('tr[data-c]').forEach(tr => tr.onclick = () => location.hash = '#/city/' + encodeURIComponent(tr.dataset.c));
 }
 
 // ---------- налаштування ----------
@@ -697,7 +811,7 @@ function settings() {
   const cities = S.J ? Object.keys(S.J.cities).sort((a, b) => a.localeCompare(b, 'uk')) : [];
   const th = ls.get('nb_theme', 'dark'), fs = ls.get('nb_fs', 'md');
   $('mbox').innerHTML = `<h3 id="mTitle">Налаштування</h3>
-    <label>Тема</label><div class="seg" id="sTheme"><button type="button" data-v="dark">Темна</button><button type="button" data-v="light">Світла</button><button type="button" data-v="auto">Як у системі</button></div>
+    <label>Тема</label><div class="seg" id="sTheme"><button type="button" data-v="dark">Темна</button><button type="button" data-v="slate">Графітова</button><button type="button" data-v="soft">М’яка світла</button><button type="button" data-v="light">Світла</button><button type="button" data-v="auto">Як у системі</button></div>
     <label>Розмір тексту</label><div class="seg" id="sFs"><button type="button" data-v="sm">Менший</button><button type="button" data-v="md">Звичайний</button><button type="button" data-v="lg">Більший</button></div>
     <label for="sMy">Моє місто</label><input class="inp" id="sMy" list="sMyL" value="${esc(S.my)}" placeholder="Почніть вводити назву"><datalist id="sMyL">${cities.map(c => `<option value="${esc(c)}">`).join('')}</datalist>
     <label for="sRad">«Мій регіон» — радіус від мого міста</label><select class="inp" id="sRad">${[50, 100, 150, 200, 300].map(r => `<option value="${r}"${r === S.rad ? ' selected' : ''}>${r} км</option>`).join('')}</select>
@@ -730,6 +844,7 @@ function route(soft) {
   else if (page === 'threats') pageThreats();
   else if (page === 'map') pageMap();
   else if (page === 'cities') pageCities();
+  else if (page === 'analytics') pageAnalytics();
   else if (page === 'archive') { if (!soft) pageArchive(); }
   else pageHome();
   if (soft) scrollTo(0, y);
