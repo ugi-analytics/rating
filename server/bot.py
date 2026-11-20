@@ -289,7 +289,7 @@ button{margin-top:18px;width:100%;padding:12px;border:0;border-radius:8px;backgr
                     res = {"error": str(e)[:200]}
                 data = json.dumps(res, ensure_ascii=False, separators=(",", ":")).encode()
                 writer.write((f"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nContent-Length: {len(data)}\r\n"
-                              "Access-Control-Allow-Origin: *\r\nCache-Control: public, max-age=60\r\nConnection: close\r\n\r\n").encode() + data)
+                              "Cache-Control: public, max-age=60\r\nConnection: close\r\n\r\n").encode() + data)
                 await writer.drain()
                 return
             if path == "/login/hit":
