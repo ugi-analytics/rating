@@ -610,7 +610,11 @@ def publish_github(html_path):
     import urllib.request
     if not GITHUB_TOKEN:
         return
-    api = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_PATH}"
+    path = GITHUB_PATH
+    if path.lower() in ("index.html", ""):
+        # з 20.11.2026 головна сторінка сайту — новий застосунок; звіт з комп'ютера публікуємо окремо, щоб його не затерти
+        path = "old/index.html"
+    api = f"https://api.github.com/repos/{GITHUB_REPO}/contents/{path}"
     hdr = {"Authorization": f"Bearer {GITHUB_TOKEN}", "Accept": "application/vnd.github+json",
            "User-Agent": "rating-vluchan"}
     try:
@@ -628,7 +632,7 @@ def publish_github(html_path):
         req = urllib.request.Request(api, data=json.dumps(body).encode(), headers=hdr, method="PUT")
         urllib.request.urlopen(req, timeout=60).read()
         owner, repo = GITHUB_REPO.split("/")
-        folder = GITHUB_PATH.rsplit("/", 1)[0] + "/" if "/" in GITHUB_PATH else ""
+        folder = path.rsplit("/", 1)[0] + "/" if "/" in path else ""
         print(f"Опубліковано: https://{owner.lower()}.github.io/{repo}/{folder}  (оновиться за 1-2 хв)")
     except urllib.error.HTTPError as e:
         msg = {401: "токен недійсний або прострочений", 403: "токену бракує дозволу Contents: Read and write",
