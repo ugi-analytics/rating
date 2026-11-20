@@ -19,6 +19,7 @@ self.addEventListener('fetch', e => {
   const req = e.request;
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
+  if (url.pathname.startsWith('/beta/')) return;   // бета-каркас працює окремо, без офлайн-кешу застосунку
   const sameOrigin = url.origin === self.location.origin;
   // 1) сторінка звіту: мережа -> кеш
   if (req.mode === 'navigate' || (sameOrigin && url.pathname.endsWith('/index.html'))) {
