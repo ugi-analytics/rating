@@ -182,7 +182,8 @@ EXCLUDE_RE = re.compile(
 # Факт наслідків (сильні ознаки) і «вибух» окремо — він часто вживається загально («здригатися від вибухів»)
 FACT_RE = re.compile(r"влучан|влучил|влучив|влучання|поцілив|приліт|прильот|уламк|пошкоджен|понівеч|зруйнов|руйнуван|"
                      r"пожеж|займан|загорі|загин|загибл|поранен|травмован|постраждал|вибит\w* вікн|вибуховою хвилею|"
-                     r"зазнал\w* (?:удар|атак|обстріл)|удар\w* зазнал|під (?:ворожим )?ударом", re.I)
+                     r"зазнал\w* (?:удар|атак|обстріл)|удар\w* зазнал|під (?:ворожим )?ударом|"
+                     r"(?:удар|обстріл|терор)\w*[^.!?]{0,80}перебувал", re.I)
 BOOM_RE = re.compile(r"вибух", re.I)
 # Тематичні дописи посадовців без факту удару: звіти, гроші, привітання, дайджести, спорт, культура
 TOPIC_RE = re.compile(r"млн\.? ?грн|млрд|тис\.? ?грн|\bзвіт\w* (?:з|про) допомог|закуплено|передано (?:для|військов)|"
@@ -197,6 +198,18 @@ def _windows(text):
     if len(parts) <= 1:
         return [text]
     return [" ".join(parts[max(0, i - 2):i + 3]) for i in range(len(parts))]
+
+
+def classify_v1(text: str, city_res: dict) -> list:
+    """Попередня методика (до 20.11.2026) — лише щоб порівнювати при перевірці архіву."""
+    if not text:
+        return []
+    t = text.lower()
+    if not HIT_RE.search(t) or not ATTACK_RE.search(t) or EXCLUDE_RE.search(t):
+        return []
+    if NOISE_RE.search(t) and not re.search(r"влучан|пошкоджен|загин|поранен|уламк", t):
+        return []
+    return [name for name, rx in city_res.items() if rx.search(text)]
 
 
 def classify(text: str, city_res: dict) -> list:

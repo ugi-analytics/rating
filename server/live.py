@@ -347,8 +347,8 @@ async def fast_poll_loop(client):
 
 def _keep(text, city):
     """Чи залишається влучання в місті за поточною методикою (перевіряємо лише там, де місто видно в збереженому тексті)."""
-    rx = city_res.get(city)
-    if not rx or not rx.search(re.sub(r"\b[А-ЯІЇЄҐ][А-ЯІЇЄҐ'ʼ’-]{2,}\b", lambda m: m.group(0).capitalize(), text)):
+    # судимо лише там, де збережений (обрізаний) текст і за старою методикою дає це місто — інакше бракує даних
+    if city not in rc.classify_v1(text, city_res):
         return True
     return city in rc.classify(text, city_res)
 
@@ -359,6 +359,7 @@ def _recheck_archive():
     ver = hashlib.md5((inspect.getsource(rc.classify) + rc.FACT_RE.pattern + rc.TOPIC_RE.pattern).encode()).hexdigest()[:10]
     if ARCH.meta_get("classify_ver") == ver:
         return
+    ARCH.restore_removed()             # кожна перевірка — з чистого аркуша: повертаємо відкинуте попередньою версією
     total, bad = ARCH.recheck(_keep)
     ARCH.meta_set("classify_ver", ver)
     sample = [{"ch": ch, "id": mid, "c": c, "x": (x or "")[:260]} for _, ch, mid, c, x in bad]

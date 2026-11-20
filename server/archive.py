@@ -50,6 +50,12 @@ class Archive:
             self.db.execute("INSERT OR REPLACE INTO meta VALUES (?,?)", (k, v))
             self.db.commit()
 
+    def restore_removed(self):
+        with self.lock:
+            self.db.execute("INSERT OR REPLACE INTO hits SELECT * FROM hits_removed")
+            self.db.execute("DELETE FROM hits_removed")
+            self.db.commit()
+
     def recheck(self, keep):
         """Перевіряє весь архів новою методикою: keep(text, city) -> False означає хибне «влучання».
         Відкинуті записи не видаляються назавжди, а переносяться в hits_removed (можна повернути)."""
