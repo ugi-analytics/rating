@@ -403,18 +403,22 @@ HITS_RES = [
     re.compile(r"(\d{1,2})\s+(?:\w+\s+){0,2}" + _WPN + r"[^.;]{0,40}?(?:влучил|влучив|поціли|вдари|впал|атакува)", re.I),
     re.compile(r"(?:влучил|влучив|поціли|вдарил|атакува\w*|удар\w*)\s+(?:\w+\s+){0,3}(\d{1,2})\s+(?:\w+\s+){0,1}" + _WPN, re.I),
 ]
+# час (11:30), дати (14.08.22), позначення зброї (С-300, Х-101, Ту-95), відсотки, роки — не кількість влучань
+_HITS_NOISE = re.compile(r"\d{1,2}[:.]\d{2}(?:[.]\d{2,4})?|[a-zа-яіїєґ]+\s?-\s?\d+\w*|\d+\s?%|\d{3,}|№\s?\d+", re.I)
 _HITS_SKIP = re.compile(r"збит|знищен|знешкоджен|подавлен|тижн|тиждень|місяц|за добу|протягом доби|від початку|з початку|область|області|районі|громад", re.I)
 
 
 def hits_for_city(text, city_rx, n_cities=1):
     """Скільки влучань у місті описує допис: «двома ракетами вдарили по місту» -> 2, «влучання на 4 локаціях» -> 4.
     Без чисел — 1. Підсумки за тиждень/по області й «збито N» не рахуються."""
-    sents = [x for x in _SENT_SPLIT.split(text or "") if city_rx.search(x)]
-    if n_cities == 1 and not _AREA_RE.search(text or ""):
-        sents = _SENT_SPLIT.split(text or "")
+    allp = _SENT_SPLIT.split(text or "")
+    idx = [j for j, x in enumerate(allp) if city_rx.search(x)]
+    sents = [" ".join(allp[j:j + 2]) for j in idx]                 # речення з містом + наступне («…Кременчук. Двома ракетами…»)
+    if not idx and n_cities == 1 and len(text or "") < 700 and not _AREA_RE.search(text or ""):
+        sents = allp[:3]
     best = 1
     for snt in sents:
-        t = snt.lower()
+        t = _HITS_NOISE.sub(" ", snt.lower())
         for w, v in (("двома", 2), ("двоє", 2), ("трьома", 3), ("троє", 3), ("чотирма", 4), ("п'ятьма", 5), ("пʼятьма", 5), ("шістьма", 6),
                      ("сімома", 7), ("вісьмома", 8), ("кількома", 2), ("декількома", 2), ("двох", 2), ("трьох", 3)):
             t = re.sub(r"\b" + w + r"\b", str(v), t)
@@ -424,7 +428,7 @@ def hits_for_city(text, city_rx, n_cities=1):
         for rx in HITS_RES:
             for m in rx.finditer(t):
                 v = int(m.group(1))
-                if 1 < v <= 30:
+                if 1 < v <= 20:
                     best = max(best, v)
     return best
 
