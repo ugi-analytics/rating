@@ -15,11 +15,16 @@ class Archive:
         self.db.execute("""CREATE TABLE IF NOT EXISTS hits(
             ch TEXT, id INTEGER, city TEXT, region TEXT, t TEXT, day TEXT,
             k INTEGER, i INTEGER, x TEXT, PRIMARY KEY(ch, id, city))""")
+        cols = [r[1] for r in self.db.execute("PRAGMA table_info(hits)")]
+        if "n" not in cols:                       # скільки влучань описує допис (1 ракета/дрон = 1 влучання)
+            self.db.execute("ALTER TABLE hits ADD COLUMN n INTEGER DEFAULT 1")
         self.db.execute("CREATE INDEX IF NOT EXISTS hits_day ON hits(day)")
         self.db.execute("CREATE INDEX IF NOT EXISTS hits_city_day ON hits(city, day)")
         self.db.execute("CREATE TABLE IF NOT EXISTS backfill(ch TEXT PRIMARY KEY, min_id INTEGER, done INTEGER DEFAULT 0, oldest TEXT)")
         self.db.execute("CREATE TABLE IF NOT EXISTS hits_removed AS SELECT * FROM hits WHERE 0")
         self.db.execute("CREATE TABLE IF NOT EXISTS meta(k TEXT PRIMARY KEY, v TEXT)")
+        if "n" not in [r[1] for r in self.db.execute("PRAGMA table_info(hits_removed)")]:
+            self.db.execute("ALTER TABLE hits_removed ADD COLUMN n INTEGER DEFAULT 1")
         self.db.commit()
         self.pending = 0
 
@@ -28,9 +33,9 @@ class Archive:
         with self.lock:
             self.db.execute("DELETE FROM hits WHERE ch=? AND id=?", (ch, mid))
             for e in events:
-                self.db.execute("INSERT OR REPLACE INTO hits VALUES (?,?,?,?,?,?,?,?,?)",
+                self.db.execute("INSERT OR REPLACE INTO hits(ch,id,city,region,t,day,k,i,x,n) VALUES (?,?,?,?,?,?,?,?,?,?)",
                                 (ch, mid, e["c"], region_of(e["c"]), e["t"], e["t"][:10],
-                                 e.get("k") or 0, e.get("i") or 0, (e.get("x") or "")[:1500]))
+                                 e.get("k") or 0, e.get("i") or 0, (e.get("x") or "")[:1500], e.get("n") or 1))
             self.pending += 1
             if self.pending >= 50:
                 self.db.commit()
@@ -52,7 +57,7 @@ class Archive:
 
     def restore_removed(self):
         with self.lock:
-            self.db.execute("INSERT OR REPLACE INTO hits SELECT * FROM hits_removed")
+            self.db.execute("INSERT OR REPLACE INTO hits(ch,id,city,region,t,day,k,i,x,n) SELECT ch,id,city,region,t,day,k,i,x,n FROM hits_removed")
             self.db.execute("DELETE FROM hits_removed")
             self.db.commit()
 
@@ -64,10 +69,35 @@ class Archive:
         bad = [r for r in rows if not keep(r[4] or "", r[3])]
         with self.lock:
             for rowid, *_ in bad:
-                self.db.execute("INSERT INTO hits_removed SELECT * FROM hits WHERE rowid=?", (rowid,))
+                self.db.execute("INSERT INTO hits_removed(ch,id,city,region,t,day,k,i,x,n) SELECT ch,id,city,region,t,day,k,i,x,n FROM hits WHERE rowid=?", (rowid,))
                 self.db.execute("DELETE FROM hits WHERE rowid=?", (rowid,))
             self.db.commit()
         return len(rows), bad
+
+    def recount(self, fn):
+        """Перераховує кількість влучань (n) для всіх записів: fn(text, city, cities_in_post) -> int."""
+        with self.lock:
+            rows = self.db.execute("SELECT rowid, ch, id, city, x FROM hits").fetchall()
+            per = {}
+            for _, ch, mid, _, _ in rows:
+                per[(ch, mid)] = per.get((ch, mid), 0) + 1
+            for rowid, ch, mid, c, x in rows:
+                self.db.execute("UPDATE hits SET n=? WHERE rowid=?", (fn(x or "", c, per[(ch, mid)]), rowid))
+            self.db.commit()
+        return len(rows)
+
+    def export_compact(self):
+        """Усі влучання без текстів — для підрахунків у застосунку за весь період (з 24.02.2022)."""
+        with self.lock:
+            rows = self.db.execute("SELECT city, t, ch, id, k, i, n FROM hits ORDER BY t").fetchall()
+        cities, chans, ci, chi, out = [], [], {}, {}, []
+        for c, t, ch, mid, k, i, n in rows:
+            if c not in ci:
+                ci[c] = len(cities); cities.append(c)
+            if ch not in chi:
+                chi[ch] = len(chans); chans.append(ch)
+            out.append([ci[c], t[:16], chi[ch], mid, k or 0, i or 0, n or 1])
+        return {"cities": cities, "channels": chans, "rows": out}
 
     # --- дочитування історії каналу ---
     def bf_get(self, ch):

@@ -171,6 +171,8 @@ async def writer():
             last = time.time()
             if ARCH is not None:
                 ARCH.commit()
+                if time.time() - EXPORT["t"] > 600:
+                    _export_hits()
 
 
 ERRS = {}                      # канал -> причина, чому не знайдено
@@ -353,10 +355,32 @@ def _keep(text, city):
     return city in rc.classify(text, city_res)
 
 
+EXPORT = {"t": 0}
+
+
+def _export_hits():
+    """hits.json — усі влучання з 2022 року без текстів (≈ кілька сотень КБ) для підрахунків у застосунку."""
+    EXPORT["t"] = time.time()
+    try:
+        d = ARCH.export_compact()
+        d["updated"] = datetime.now(KYIV).isoformat(timespec="seconds")
+        raw = json.dumps(d, ensure_ascii=False, separators=(",", ":"))
+        tmp = WWW / "hits.json.tmp"
+        tmp.write_text(raw)
+        tmp.replace(WWW / "hits.json")
+    except Exception as e:
+        log(f"! hits.json: {type(e).__name__}: {e}")
+
+
 def _recheck_archive():
     import hashlib
     import inspect
     ver = hashlib.md5((inspect.getsource(rc.classify) + rc.FACT_RE.pattern + rc.TOPIC_RE.pattern).encode()).hexdigest()[:10]
+    hver = hashlib.md5(inspect.getsource(rc.hits_for_city).encode() + str([r.pattern for r in rc.HITS_RES]).encode()).hexdigest()[:10]
+    if ARCH.meta_get("hits_ver") != hver:
+        n = ARCH.recount(lambda x, c, nc: rc.hits_for_city(x, city_res[c], nc) if c in city_res else 1)
+        ARCH.meta_set("hits_ver", hver)
+        log(f"Архів: перераховано кількість влучань у {n} записах")
     if ARCH.meta_get("classify_ver") == ver:
         return
     ARCH.restore_removed()             # кожна перевірка — з чистого аркуша: повертаємо відкинуте попередньою версією
@@ -469,11 +493,15 @@ async def main():
         for (ch, mid), ev in list(by_msg.items()):     # події з events.json — теж за поточною методикою
             if ev:
                 ev[:] = [e for e in ev if _keep(e.get("x") or "", e["c"])]
+                for e in ev:
+                    if "n" not in e and e["c"] in city_res:
+                        e["n"] = rc.hits_for_city(e.get("x") or "", city_res[e["c"]], len(ev))
             if ev:
                 ARCH.put(ch, mid, ev, lambda c: rc.CITY_REGION.get(c, ""))
         ARCH.commit()
         notifier.archive = ARCH
         _recheck_archive()
+        _export_hits()
         log("Архів влучань: " + json.dumps(ARCH.query({}), ensure_ascii=False))
     except Exception as e:
         ARCH = None

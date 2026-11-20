@@ -63,7 +63,8 @@ def process_message(m, ch, city_res):
     out = []
     for c in cities:
         k, i = rc.casualties_for_city(text, city_res[c], len(cities))
-        out.append({"t": t, "c": c, "ch": ch, "id": m.id, "k": k, "i": i, "x": text[:600]})
+        n = rc.hits_for_city(text, city_res[c], len(cities))
+        out.append({"t": t, "c": c, "ch": ch, "id": m.id, "k": k, "i": i, "n": n, "x": text[:600]})
     return out
 
 
