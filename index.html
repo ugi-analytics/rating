@@ -746,7 +746,7 @@ function pageMap() {
     <div id="near" style="margin-top:14px"></div></section>`;
   const draw = () => { const r = $('mreg').value; ls.set('nb_mreg', r); const l = r ? cur.filter(it => it.region === r) : cur; $('mcount').textContent = `Влучань: ${agg(l).n}, атак: ${l.length}, міст: ${agg(l).cities}`; drawMap('bigmap', l); };
   const fitH = () => { const el = $('bigmap'); if (!el) return; const bn = document.querySelector('.bnav'), bh = bn && getComputedStyle(bn).display !== 'none' ? bn.offsetHeight : 0;
-    el.style.height = Math.max(340, innerHeight - el.getBoundingClientRect().top - bh - 56) + 'px';   // знизу лишаємо смугу, щоб гортати сторінку if (mapObj) mapObj.invalidateSize(); };
+    el.style.height = Math.max(340, innerHeight - el.getBoundingClientRect().top - bh - 56) + 'px'; /* знизу лишаємо смугу, щоб гортати сторінку */ if (mapObj) mapObj.invalidateSize(); };
   fitH(); window._mapFit && removeEventListener('resize', window._mapFit); window._mapFit = fitH; addEventListener('resize', fitH);
   $('mreg').onchange = draw; draw();
   // пошук будь-якого населеного пункту (OpenStreetMap)

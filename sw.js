@@ -1,6 +1,6 @@
 // Рейтинг влучань — офлайн-режим: сторінка звіту завжди спершу з мережі (щоб бачити свіжий звіт),
 // без інтернету — остання збережена копія.
-const CACHE = 'rv-v13';
+const CACHE = 'rv-v14';
 const CORE = ['./', './manifest.webmanifest', './sky-192.png', './sky-512.png'];
 
 self.addEventListener('install', e => {
