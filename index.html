@@ -223,7 +223,10 @@ tr.click{cursor:pointer} tr.click:hover td{background:var(--surface-2)}
 .results button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--border);background:var(--surface-1);padding:8px 12px;cursor:pointer;font-size:14px}
 .results button:hover{background:var(--surface-2)} .results small{color:var(--text-muted)}
 .bnav{display:none}
-.darktiles .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.82) contrast(.92) saturate(.6)}
+.darktiles .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(1.05) contrast(.85) saturate(.5)}
+.leaflet-control-layers{background:var(--surface,#1b212b);color:var(--text-primary);border:1px solid var(--border)!important;border-radius:10px!important;font-size:14px}
+.leaflet-control-layers-expanded{padding:8px 12px}
+.leaflet-control-layers label{margin:6px 0}
 @media (max-width:760px){.mapcard{margin:-14px -14px 0;border-radius:0;border-left:0;border-right:0;padding:10px}.mapcard .mapbox.big{border-radius:8px}.mapbar{gap:8px}.mapbar .inp{min-width:0}.mapbar #mreg{flex:1}}
 .flybox{position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#e9e9ec}
 .flybox iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
@@ -507,16 +510,31 @@ function series(list, R, g) {
 let mapObj = null;
 const UA = [[44.4, 22.2], [52.3, 40.2]];
 function tiles(m) {
-  // OpenStreetMap — назви українською; у темних темах тайли «перефарбовуються» фільтром
-  const light = ['light', 'soft'].includes(document.documentElement.dataset.theme) || (document.documentElement.dataset.theme === 'auto' && matchMedia('(prefers-color-scheme: light)').matches);
-  m.getContainer().classList.toggle('darktiles', !light);
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '&copy; OpenStreetMap' }).addTo(m);
+  // перемикач підкладки: вибір запам'ятовується
+  const esri = x => `https://server.arcgisonline.com/ArcGIS/rest/services/${x}/MapServer/tile/{z}/{y}/{x}`;
+  const th = document.documentElement.dataset.theme;
+  const light = ['light', 'soft'].includes(th) || (th === 'auto' && matchMedia('(prefers-color-scheme: light)').matches);
+  const gray = (b, r) => L.layerGroup([L.tileLayer(esri(b), { maxZoom: 16, attribution: '&copy; Esri' }), L.tileLayer(esri(r), { maxZoom: 16 })]);
+  const osm = () => L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' });
+  const B = {
+    'Схема темна': gray('Canvas/World_Dark_Gray_Base', 'Canvas/World_Dark_Gray_Reference'),
+    'Схема світла': gray('Canvas/World_Light_Gray_Base', 'Canvas/World_Light_Gray_Reference'),
+    'Детальна (укр. назви)': osm(),
+    'Детальна темна': osm(),
+    'Супутник': L.layerGroup([L.tileLayer(esri('World_Imagery'), { maxZoom: 18, attribution: '&copy; Esri' }), L.tileLayer(esri('Reference/World_Boundaries_and_Places'), { maxZoom: 18 })])
+  };
+  let cur = ls.get('nb_tiles', '');
+  if (!B[cur]) cur = light ? 'Схема світла' : 'Схема темна';
+  const apply = n => m.getContainer().classList.toggle('darktiles', n === 'Детальна темна');
+  B[cur].addTo(m); apply(cur);
+  L.control.layers(B, null, { position: 'topright', collapsed: true }).addTo(m);
+  m.on('baselayerchange', e => { ls.set('nb_tiles', e.name); apply(e.name); });
 }
 function drawMap(id, list) {
   if (mapObj) { mapObj.remove(); mapObj = null; }
   const el = $(id); if (!el) return;
   if (!window.L) { el.innerHTML = '<div class="state">Карта не завантажилась.</div>'; return; }
-  const m = L.map(el, { preferCanvas: true, zoomSnap: 0.25, maxBounds: [[41.5, 17], [55.5, 45.5]], maxBoundsViscosity: 0.8 }).fitBounds(UA, { padding: [4, 4] }); tiles(m);
+  const m = L.map(el, { preferCanvas: true, zoomSnap: 0.25, maxBounds: [[42.5, 19], [54.5, 43.5]], maxBoundsViscosity: 0.8 }).fitBounds(UA, { padding: [4, 4] }); tiles(m);
   const by = {}; list.forEach(it => (by[it.city] = by[it.city] || []).push(it));
   const cl = L.markerClusterGroup({ maxClusterRadius: 46, showCoverageOnHover: false,
     iconCreateFunction: c => { const n = c.getAllChildMarkers().reduce((s, mk) => s + mk.options.n, 0), d = 30 + Math.min(26, Math.sqrt(n) * 3); return L.divIcon({ html: `<div class="mk cl" style="width:${d}px;height:${d}px">${n}</div>`, className: '', iconSize: [d, d] }); } });
