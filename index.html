@@ -223,6 +223,8 @@ tr.click{cursor:pointer} tr.click:hover td{background:var(--surface-2)}
 .results button{display:block;width:100%;text-align:left;border:0;border-bottom:1px solid var(--border);background:var(--surface-1);padding:8px 12px;cursor:pointer;font-size:14px}
 .results button:hover{background:var(--surface-2)} .results small{color:var(--text-muted)}
 .bnav{display:none}
+.darktiles .leaflet-tile-pane{filter:invert(1) hue-rotate(180deg) brightness(.82) contrast(.92) saturate(.6)}
+@media (max-width:760px){.mapcard{margin:-14px -14px 0;border-radius:0;border-left:0;border-right:0;padding:10px}.mapcard .mapbox.big{border-radius:8px}.mapbar{gap:8px}.mapbar .inp{min-width:0}.mapbar #mreg{flex:1}}
 .flybox{position:relative;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:#e9e9ec}
 .flybox iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .flybox.full{position:fixed;inset:0;z-index:3000;border-radius:0;border:0;height:auto!important}
@@ -505,16 +507,16 @@ function series(list, R, g) {
 let mapObj = null;
 const UA = [[44.4, 22.2], [52.3, 40.2]];
 function tiles(m) {
-  const esri = s => `https://server.arcgisonline.com/ArcGIS/rest/services/${s}/MapServer/tile/{z}/{y}/{x}`;
-  const light = ['light', 'soft'].includes(document.documentElement.dataset.theme);
-  L.tileLayer(esri(light ? 'Canvas/World_Light_Gray_Base' : 'Canvas/World_Dark_Gray_Base'), { maxZoom: 15, attribution: '&copy; Esri' }).addTo(m);
-  L.tileLayer(esri(light ? 'Canvas/World_Light_Gray_Reference' : 'Canvas/World_Dark_Gray_Reference'), { maxZoom: 15 }).addTo(m);
+  // OpenStreetMap — назви українською; у темних темах тайли «перефарбовуються» фільтром
+  const light = ['light', 'soft'].includes(document.documentElement.dataset.theme) || (document.documentElement.dataset.theme === 'auto' && matchMedia('(prefers-color-scheme: light)').matches);
+  m.getContainer().classList.toggle('darktiles', !light);
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '&copy; OpenStreetMap' }).addTo(m);
 }
 function drawMap(id, list) {
   if (mapObj) { mapObj.remove(); mapObj = null; }
   const el = $(id); if (!el) return;
   if (!window.L) { el.innerHTML = '<div class="state">Карта не завантажилась.</div>'; return; }
-  const m = L.map(el, { preferCanvas: true }).fitBounds(UA); tiles(m);
+  const m = L.map(el, { preferCanvas: true, zoomSnap: 0.25, maxBounds: [[41.5, 17], [55.5, 45.5]], maxBoundsViscosity: 0.8 }).fitBounds(UA, { padding: [4, 4] }); tiles(m);
   const by = {}; list.forEach(it => (by[it.city] = by[it.city] || []).push(it));
   const cl = L.markerClusterGroup({ maxClusterRadius: 46, showCoverageOnHover: false,
     iconCreateFunction: c => { const n = c.getAllChildMarkers().reduce((s, mk) => s + mk.options.n, 0), d = 30 + Math.min(26, Math.sqrt(n) * 3); return L.divIcon({ html: `<div class="mk cl" style="width:${d}px;height:${d}px">${n}</div>`, className: '', iconSize: [d, d] }); } });
@@ -530,7 +532,7 @@ function drawMap(id, list) {
     cl.addLayer(mk);
   });
   m.addLayer(cl); mapObj = m;
-  setTimeout(() => { m.invalidateSize(); m.fitBounds(UA); }, 60);
+  setTimeout(() => { m.invalidateSize(); m.fitBounds(UA, { padding: [4, 4] }); m.setMinZoom(Math.max(4, m.getZoom() - 1)); }, 60);
   return m;
 }
 
@@ -735,14 +737,17 @@ let geoMarker = null;
 function pageMap() {
   periodBar('days'); if (!guard()) return;
   const R = range(), cur = S.inc.filter(it => inR(it, R)), regs = [...new Set(Object.values(S.J.cities).map(c => c.r).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'uk')), reg = ls.get('nb_mreg', '');
-  $('view').innerHTML = `<section class="card">
-    <div class="bar-row"><div style="position:relative;flex:1;min-width:240px;max-width:420px"><input class="inp" id="mq" type="search" placeholder="Пошук населеного пункту…" autocomplete="off" style="width:100%"><div class="results" id="mres"></div></div>
+  $('view').innerHTML = `<section class="card mapcard">
+    <div class="bar-row mapbar"><div style="position:relative;flex:1;min-width:200px;max-width:420px"><input class="inp" id="mq" type="search" placeholder="Пошук населеного пункту…" autocomplete="off" style="width:100%"><div class="results" id="mres"></div></div>
       <select class="inp" id="mreg"><option value="">Усі області</option>${regs.map(r => `<option${r === reg ? ' selected' : ''}>${esc(r)}</option>`).join('')}</select>
       <span class="sub" id="mcount" style="margin:0"></span></div>
-    <div id="bigmap" class="mapbox"></div>
+    <div id="bigmap" class="mapbox big"></div>
     <div class="legend"><span><i></i>місто з влучаннями (число — кількість)</span><span><i style="background:var(--blue)"></i>група міст поруч</span><span><i style="background:#fff;border:2px solid var(--blue)"></i>знайдений пункт</span></div>
     <div id="near" style="margin-top:14px"></div></section>`;
   const draw = () => { const r = $('mreg').value; ls.set('nb_mreg', r); const l = r ? cur.filter(it => it.region === r) : cur; $('mcount').textContent = `Влучань: ${agg(l).n}, атак: ${l.length}, міст: ${agg(l).cities}`; drawMap('bigmap', l); };
+  const fitH = () => { const el = $('bigmap'); if (!el) return; const bn = document.querySelector('.bnav'), bh = bn && getComputedStyle(bn).display !== 'none' ? bn.offsetHeight : 0;
+    el.style.height = Math.max(340, innerHeight - el.getBoundingClientRect().top - bh - 56) + 'px';   // знизу лишаємо смугу, щоб гортати сторінку if (mapObj) mapObj.invalidateSize(); };
+  fitH(); window._mapFit && removeEventListener('resize', window._mapFit); window._mapFit = fitH; addEventListener('resize', fitH);
   $('mreg').onchange = draw; draw();
   // пошук будь-якого населеного пункту (OpenStreetMap)
   let tmr = null, ctl = null;
