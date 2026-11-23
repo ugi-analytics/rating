@@ -177,6 +177,8 @@ def detect(text, ch, city_res, msg_time):
     if not text or len(text) > 3000:
         return []
     text = re.sub(r"[ʼ’`´]", "'", text)
+    if rc.is_ad(text):                       # реклама («Увага, Полтава! Чорна п'ятниця…») — не загроза
+        return []
     if rc.classify(text, city_res):          # це повідомлення про влучання — не попередження
         return []
     ch_reg = rc.CHANNEL_REGION.get(ch.lower())
